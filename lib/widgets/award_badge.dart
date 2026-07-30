@@ -6,9 +6,8 @@ import '../logic/format.dart';
 import '../models/award.dart';
 import '../theme/app_theme.dart';
 
-/// A circular medal. Earned badges get their full gradient and a soft bloom;
-/// locked ones sit greyed out behind a thin progress arc.
-class AwardBadge extends StatelessWidget {
+/// A dimensional, animated medal with a restrained moving highlight.
+class AwardBadge extends StatefulWidget {
   const AwardBadge({
     super.key,
     required this.award,
@@ -23,74 +22,151 @@ class AwardBadge extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
+  State<AwardBadge> createState() => _AwardBadgeState();
+}
+
+class _AwardBadgeState extends State<AwardBadge> with TickerProviderStateMixin {
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  )..forward();
+  late final AnimationController _shimmer = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3200),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.award.isEarned) _shimmer.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant AwardBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.award.isEarned && widget.award.isEarned) {
+      _entrance.forward(from: 0);
+      _shimmer.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    _shimmer.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final award = widget.award;
     final earned = award.isEarned;
-    final gradient = award.definition.style.gradient;
+    final colors = award.definition.style.gradient;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: size,
-            height: size,
-            child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-                if (!earned)
-                  CustomPaint(
-                    size: Size.square(size),
-                    painter: _ProgressArcPainter(
-                      progress: award.progress,
-                      color: gradient.last,
-                    ),
+          AnimatedBuilder(
+            animation: Listenable.merge([_entrance, _shimmer]),
+            builder: (context, _) {
+              final entrance = Curves.elasticOut.transform(_entrance.value);
+              final tilt = earned
+                  ? math.sin(_shimmer.value * math.pi * 2) * 0.025
+                  : 0.0;
+              return Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.0015)
+                  ..rotateY(tilt)
+                  ..scaleByDouble(
+                    0.82 + entrance * 0.18,
+                    0.82 + entrance * 0.18,
+                    1,
+                    1,
                   ),
-                Container(
-                  width: size * 0.86,
-                  height: size * 0.86,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: earned
-                          ? gradient
-                          : const [Color(0xFF2A2A2C), Color(0xFF202022)],
-                    ),
-                    boxShadow: earned
-                        ? [
-                            BoxShadow(
-                              color: gradient.last.withValues(alpha: 0.35),
-                              blurRadius: size * 0.22,
-                              spreadRadius: -size * 0.04,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Icon(
-                    award.definition.icon,
-                    size: size * 0.38,
-                    color: earned
-                        ? Colors.white
-                        : AppColors.tertiaryLabel.withValues(alpha: 0.85),
+                child: SizedBox(
+                  width: widget.size,
+                  height: widget.size,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (!earned)
+                        CustomPaint(
+                          size: Size.square(widget.size),
+                          painter: _ProgressArcPainter(
+                            progress: award.progress,
+                            color: colors.last,
+                          ),
+                        ),
+                      CustomPaint(
+                        size: Size.square(widget.size * 0.88),
+                        painter: _MedalPainter(
+                          colors: earned
+                              ? colors
+                              : const [Color(0xFF303034), Color(0xFF171719)],
+                          earned: earned,
+                          shimmer: _shimmer.value,
+                        ),
+                      ),
+                      Container(
+                        width: widget.size * 0.57,
+                        height: widget.size * 0.57,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: earned
+                                ? Colors.white.withValues(alpha: 0.24)
+                                : Colors.white.withValues(alpha: 0.05),
+                          ),
+                          gradient: RadialGradient(
+                            center: const Alignment(-0.35, -0.4),
+                            colors: earned
+                                ? [
+                                    Colors.white.withValues(alpha: 0.18),
+                                    Colors.black.withValues(alpha: 0.18),
+                                  ]
+                                : const [Color(0xFF2C2C30), Color(0xFF202024)],
+                          ),
+                        ),
+                        child: Icon(
+                          award.definition.icon,
+                          size: widget.size * 0.31,
+                          color: earned
+                              ? Colors.white
+                              : AppColors.tertiaryLabel,
+                          shadows: earned
+                              ? const [
+                                  Shadow(
+                                    color: Colors.black45,
+                                    offset: Offset(0, 2),
+                                    blurRadius: 3,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                      ),
+                      if (earned &&
+                          award.definition.repeatable &&
+                          award.timesEarned > 1)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: _CountChip(count: award.timesEarned),
+                        ),
+                    ],
                   ),
                 ),
-                if (earned && award.definition.repeatable && award.timesEarned > 1)
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: _CountChip(count: award.timesEarned),
-                  ),
-              ],
-            ),
+              );
+            },
           ),
-          if (showTitle) ...[
-            const SizedBox(height: 8),
+          if (widget.showTitle) ...[
+            const SizedBox(height: 9),
             SizedBox(
-              width: size + 16,
+              width: widget.size + 18,
               child: Text(
                 award.title,
                 textAlign: TextAlign.center,
@@ -98,7 +174,7 @@ class AwardBadge extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 11.5,
-                  height: 1.25,
+                  height: 1.2,
                   fontWeight: FontWeight.w600,
                   color: earned ? AppColors.label : AppColors.secondaryLabel,
                 ),
@@ -109,6 +185,97 @@ class AwardBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MedalPainter extends CustomPainter {
+  const _MedalPainter({
+    required this.colors,
+    required this.earned,
+    required this.shimmer,
+  });
+
+  final List<Color> colors;
+  final bool earned;
+  final double shimmer;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * 0.47;
+    final path = Path();
+    for (var i = 0; i < 12; i++) {
+      final angle = -math.pi / 2 + i * math.pi / 6;
+      final r = i.isEven ? radius : radius * 0.91;
+      final point = Offset(
+        center.dx + math.cos(angle) * r,
+        center.dy + math.sin(angle) * r,
+      );
+      i == 0
+          ? path.moveTo(point.dx, point.dy)
+          : path.lineTo(point.dx, point.dy);
+    }
+    path.close();
+
+    if (earned) {
+      canvas.drawShadow(
+        path,
+        colors.last.withValues(alpha: 0.75),
+        size.width * 0.12,
+        false,
+      );
+    }
+    final rect = Offset.zero & size;
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colors.last,
+            colors.first,
+            Color.lerp(colors.first, Colors.black, 0.42)!,
+          ],
+          stops: const [0, 0.52, 1],
+        ).createShader(rect),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.035
+        ..shader = LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: earned ? 0.72 : 0.12),
+            Colors.black54,
+          ],
+        ).createShader(rect),
+    );
+
+    if (!earned) return;
+    final x = -size.width + shimmer * size.width * 3;
+    canvas.save();
+    canvas.clipPath(path);
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(-0.35);
+    canvas.translate(-center.dx, -center.dy);
+    canvas.drawRect(
+      Rect.fromLTWH(x, -size.height, size.width * 0.22, size.height * 3),
+      Paint()
+        ..shader = LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.white.withValues(alpha: 0.48),
+            Colors.transparent,
+          ],
+        ).createShader(rect),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _MedalPainter old) =>
+      old.shimmer != shimmer || old.earned != earned || old.colors != colors;
 }
 
 class _CountChip extends StatelessWidget {

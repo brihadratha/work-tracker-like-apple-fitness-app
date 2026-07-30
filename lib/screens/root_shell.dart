@@ -85,17 +85,26 @@ class _RootShellState extends State<RootShell> {
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.radio_button_unchecked_rounded),
-              selectedIcon: Icon(Icons.donut_large_rounded, color: AppColors.label),
+              selectedIcon: Icon(
+                Icons.donut_large_rounded,
+                color: AppColors.label,
+              ),
               label: 'Today',
             ),
             NavigationDestination(
-              icon: Icon(Icons.show_chart_rounded),
-              selectedIcon: Icon(Icons.show_chart_rounded, color: AppColors.label),
-              label: 'Trends',
+              icon: Icon(Icons.calendar_month_outlined),
+              selectedIcon: Icon(
+                Icons.calendar_month_rounded,
+                color: AppColors.label,
+              ),
+              label: 'History',
             ),
             NavigationDestination(
               icon: Icon(Icons.military_tech_outlined),
-              selectedIcon: Icon(Icons.military_tech_rounded, color: AppColors.label),
+              selectedIcon: Icon(
+                Icons.military_tech_rounded,
+                color: AppColors.label,
+              ),
               label: 'Awards',
             ),
             NavigationDestination(

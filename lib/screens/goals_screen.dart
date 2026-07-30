@@ -3,14 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../logic/format.dart';
-import '../models/daily_summary.dart';
-import '../models/goals.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/activity_rings.dart';
 
-/// Goal editor. The preview rings update live against today's actual numbers,
-/// so you can see what a change would mean before committing to it.
 class GoalsScreen extends StatefulWidget {
   const GoalsScreen({super.key});
 
@@ -19,212 +15,131 @@ class GoalsScreen extends StatefulWidget {
 }
 
 class _GoalsScreenState extends State<GoalsScreen> {
-  late Goals _draft;
+  late int _minutes;
 
   @override
   void initState() {
     super.initState();
-    _draft = context.read<AppState>().goals;
+    _minutes = context.read<AppState>().goals.focusMinutes;
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final preview = DailySummary.fromSessions(
-      state.today,
-      state.sessionsOn(state.today),
-      _draft,
-    );
-    final changed = _draft != state.goals;
-
+    final progress = state.todaySummary.focusMinutes / _minutes;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
-        title: const Text('Daily Goals'),
+        title: const Text('Daily Goal'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
         children: [
           Center(
             child: ActivityRings(
-              size: 170,
+              size: 220,
+              strokeWidth: 28,
               animate: false,
-              progress: {
-                for (final kind in RingKind.values) kind: preview.progressFor(kind),
-              },
+              progress: {RingKind.focus: progress},
+              center: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$_minutes',
+                    style: const TextStyle(
+                      fontSize: 52,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -2,
+                    ),
+                  ),
+                  Text(
+                    'MINUTES',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: AppColors.focusEnd),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          Center(
-            child: Text(
-              'Previewed against today\'s ${Fmt.duration(preview.focusMinutes)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+          const SizedBox(height: 28),
+          Text(
+            'Choose a goal that feels achievable every day.',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.secondaryLabel),
           ),
-          const SizedBox(height: 26),
-
-          _GoalSlider(
-            kind: RingKind.focus,
-            title: 'Focus',
-            description: 'Total minutes of work logged in a day.',
-            value: _draft.focusMinutes.toDouble(),
-            min: 30,
-            max: 720,
-            step: 15,
-            formatter: (v) => Fmt.duration(v.round()),
-            onChanged: (v) =>
-                setState(() => _draft = _draft.copyWith(focusMinutes: v.round())),
+          const SizedBox(height: 28),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _StepButton(
+                icon: Icons.remove_rounded,
+                onTap: () => _change(-15),
+              ),
+              SizedBox(
+                width: 128,
+                child: Text(
+                  Fmt.duration(_minutes),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              _StepButton(icon: Icons.add_rounded, onTap: () => _change(15)),
+            ],
           ),
-          const SizedBox(height: 14),
-          _GoalSlider(
-            kind: RingKind.sessions,
-            title: 'Deep Work',
-            description:
-                'Blocks of at least ${_draft.deepSessionMinutes} minutes, uninterrupted.',
-            value: _draft.deepSessions.toDouble(),
-            min: 1,
-            max: 12,
-            step: 1,
-            formatter: (v) => '${v.round()} block${v.round() == 1 ? '' : 's'}',
-            onChanged: (v) =>
-                setState(() => _draft = _draft.copyWith(deepSessions: v.round())),
-          ),
-          const SizedBox(height: 14),
-          _GoalSlider(
-            kind: RingKind.consistency,
-            title: 'Active Hours',
-            description: 'Distinct hours of the day containing some work.',
-            value: _draft.activeHours.toDouble(),
-            min: 1,
-            max: 16,
-            step: 1,
-            formatter: (v) => '${v.round()} hour${v.round() == 1 ? '' : 's'}',
-            onChanged: (v) =>
-                setState(() => _draft = _draft.copyWith(activeHours: v.round())),
-          ),
-          const SizedBox(height: 14),
-          _GoalSlider(
-            kind: RingKind.sessions,
-            title: 'Deep block length',
-            description: 'How long a block must run before it counts as deep.',
-            value: _draft.deepSessionMinutes.toDouble(),
-            min: 10,
-            max: 90,
-            step: 5,
-            formatter: (v) => Fmt.duration(v.round()),
-            onChanged: (v) => setState(
-              () => _draft = _draft.copyWith(deepSessionMinutes: v.round()),
-            ),
-          ),
-
-          const SizedBox(height: 26),
+          const SizedBox(height: 34),
           FilledButton(
-            onPressed: changed
-                ? () async {
+            onPressed: _minutes == state.goals.focusMinutes
+                ? null
+                : () async {
                     HapticFeedback.mediumImpact();
-                    await state.setGoals(_draft);
+                    await state.setGoals(
+                      state.goals.copyWith(focusMinutes: _minutes),
+                    );
                     if (context.mounted) Navigator.of(context).pop();
-                  }
-                : null,
+                  },
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.focusStart,
+              backgroundColor: AppColors.focusEnd,
               disabledBackgroundColor: AppColors.surfaceElevated,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
-            child: Text(
-              changed ? 'Save Goals' : 'No Changes',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: changed ? Colors.white : AppColors.tertiaryLabel,
-              ),
+            child: const Text(
+              'Set Daily Goal',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'New goals start today. Days you\'ve already finished keep the goals '
-            'you had then, so your streak and awards stay safe.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, height: 1.35, color: AppColors.tertiaryLabel),
           ),
         ],
       ),
     );
+  }
+
+  void _change(int delta) {
+    final next = (_minutes + delta).clamp(15, 720);
+    if (next == _minutes) return;
+    HapticFeedback.selectionClick();
+    setState(() => _minutes = next);
   }
 }
 
-class _GoalSlider extends StatelessWidget {
-  const _GoalSlider({
-    required this.kind,
-    required this.title,
-    required this.description,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.step,
-    required this.formatter,
-    required this.onChanged,
-  });
-
-  final RingKind kind;
-  final String title;
-  final String description;
-  final double value;
-  final double min;
-  final double max;
-  final double step;
-  final String Function(double) formatter;
-  final ValueChanged<double> onChanged;
+class _StepButton extends StatelessWidget {
+  const _StepButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(kind.icon, size: 17, color: kind.end),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-              ),
-              Text(
-                formatter(value),
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: kind.end,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(description, style: Theme.of(context).textTheme.bodySmall),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              overlayShape: SliderComponentShape.noOverlay,
-            ),
-            child: Slider(
-              value: value.clamp(min, max),
-              min: min,
-              max: max,
-              divisions: ((max - min) / step).round(),
-              activeColor: kind.end,
-              inactiveColor: AppColors.surfaceElevated,
-              onChanged: (v) {
-                HapticFeedback.selectionClick();
-                onChanged(v);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => IconButton.filled(
+    onPressed: onTap,
+    icon: Icon(icon),
+    style: IconButton.styleFrom(
+      minimumSize: const Size.square(52),
+      backgroundColor: AppColors.surfaceElevated,
+      foregroundColor: AppColors.label,
+    ),
+  );
 }

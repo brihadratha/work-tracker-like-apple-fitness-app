@@ -11,41 +11,73 @@ import '../models/award.dart';
 import '../models/daily_summary.dart';
 import '../models/goals.dart';
 import '../models/work_session.dart';
+import '../services/live_activity_service.dart';
 import '../theme/app_theme.dart';
 
 /// A timer the user has started but not yet logged.
 @immutable
 class RunningTimer {
-  const RunningTimer({required this.startedAt, required this.category});
+  const RunningTimer({
+    required this.startedAt,
+    required this.category,
+    required this.accumulated,
+    required this.resumedAt,
+  });
 
   final DateTime startedAt;
   final WorkCategory category;
+  final Duration accumulated;
+  final DateTime? resumedAt;
+
+  bool get isPaused => resumedAt == null;
 
   Duration elapsedAt(DateTime now) {
-    final elapsed = now.difference(startedAt);
+    final activeSinceResume = resumedAt == null
+        ? Duration.zero
+        : now.difference(resumedAt!);
+    final elapsed = accumulated + activeSinceResume;
     return elapsed.isNegative ? Duration.zero : elapsed;
   }
 
   Map<String, dynamic> toJson() => {
-        'startedAt': startedAt.toIso8601String(),
-        'category': category.name,
-      };
+    'startedAt': startedAt.toIso8601String(),
+    'category': category.name,
+    'accumulatedSeconds': accumulated.inSeconds,
+    if (resumedAt != null) 'resumedAt': resumedAt!.toIso8601String(),
+    'isPaused': isPaused,
+  };
 
-  factory RunningTimer.fromJson(Map<String, dynamic> json) => RunningTimer(
-        startedAt: DateTime.parse(json['startedAt'] as String),
-        category: WorkCategoryInfo.fromName(json['category'] as String?),
-      );
+  factory RunningTimer.fromJson(Map<String, dynamic> json) {
+    final startedAt = DateTime.parse(json['startedAt'] as String);
+    final hasPauseState =
+        json.containsKey('accumulatedSeconds') || json.containsKey('isPaused');
+    return RunningTimer(
+      startedAt: startedAt,
+      category: WorkCategoryInfo.fromName(json['category'] as String?),
+      accumulated: Duration(
+        seconds: (json['accumulatedSeconds'] as num?)?.round() ?? 0,
+      ),
+      resumedAt: hasPauseState && json['isPaused'] == true
+          ? null
+          : DateTime.tryParse(json['resumedAt'] as String? ?? '') ?? startedAt,
+    );
+  }
 }
 
 /// Single source of truth for the app. Owns sessions, goals and the live
 /// timer, and derives every summary, streak, trend and award from them.
 class AppState extends ChangeNotifier {
-  AppState({Persistence? persistence, DateTime Function()? clock})
-      : _persistence = persistence ?? FilePersistence(),
-        _clock = clock ?? DateTime.now;
+  AppState({
+    Persistence? persistence,
+    DateTime Function()? clock,
+    LiveActivityService? liveActivity,
+  }) : _persistence = persistence ?? FilePersistence(),
+       _clock = clock ?? DateTime.now,
+       _liveActivity = liveActivity ?? const LiveActivityService();
 
   final Persistence _persistence;
   final DateTime Function() _clock;
+  final LiveActivityService _liveActivity;
 
   static const _storeVersion = 2;
   static const _awardsEngine = AwardsEngine();
@@ -81,6 +113,7 @@ class AppState extends ChangeNotifier {
   Goals goalsOn(DateTime day) => _goalHistory.goalsOn(day);
   RunningTimer? get timer => _timer;
   bool get isTimerRunning => _timer != null;
+  bool get isTimerPaused => _timer?.isPaused ?? false;
   List<WorkSession> get sessions => List.unmodifiable(_sessions);
   List<Award> get awards => List.unmodifiable(_awards);
   Map<DateTime, DailySummary> get summariesByDay => Map.unmodifiable(_byDay);
@@ -110,7 +143,8 @@ class AppState extends ChangeNotifier {
       _streaks.compute(_byDay, today, (d) => d.isClosed(kind));
 
   /// Consecutive days with any work at all — the "showed up" streak.
-  StreakInfo get loggingStreak => _streaks.compute(_byDay, today, (d) => d.hasWork);
+  StreakInfo get loggingStreak =>
+      _streaks.compute(_byDay, today, (d) => d.hasWork);
 
   List<Trend> get trends => _trends.computeAll(_byDay, today);
 
@@ -174,7 +208,7 @@ class AppState extends ChangeNotifier {
     }
 
     _recompute(collectCelebrations: false);
-    if (_timer != null) _startTicker();
+    if (_timer != null && !_timer!.isPaused) _startTicker();
     _loaded = true;
     notifyListeners();
   }
@@ -236,9 +270,53 @@ class AppState extends ChangeNotifier {
 
   Future<void> startTimer(WorkCategory category) async {
     if (_timer != null) return;
-    _timer = RunningTimer(startedAt: now, category: category);
+    final startedAt = now;
+    _timer = RunningTimer(
+      startedAt: startedAt,
+      category: category,
+      accumulated: Duration.zero,
+      resumedAt: startedAt,
+    );
     _startTicker();
     await _save();
+    await _liveActivity.start(
+      startedAt: startedAt,
+      elapsed: Duration.zero,
+      category: category.label,
+      goalMinutes: goals.focusMinutes,
+    );
+    notifyListeners();
+  }
+
+  Future<void> pauseTimer() async {
+    final running = _timer;
+    if (running == null || running.isPaused) return;
+    final elapsed = running.elapsedAt(now);
+    _timer = RunningTimer(
+      startedAt: running.startedAt,
+      category: running.category,
+      accumulated: elapsed,
+      resumedAt: null,
+    );
+    _ticker?.cancel();
+    _ticker = null;
+    await _save();
+    await _syncLiveActivity();
+    notifyListeners();
+  }
+
+  Future<void> resumeTimer() async {
+    final running = _timer;
+    if (running == null || !running.isPaused) return;
+    _timer = RunningTimer(
+      startedAt: running.startedAt,
+      category: running.category,
+      accumulated: running.accumulated,
+      resumedAt: now,
+    );
+    _startTicker();
+    await _save();
+    await _syncLiveActivity();
     notifyListeners();
   }
 
@@ -247,13 +325,15 @@ class AppState extends ChangeNotifier {
     final running = _timer;
     if (running == null) return null;
 
-    final minutes = running.elapsedAt(now).inMinutes;
+    final elapsed = running.elapsedAt(now);
+    final minutes = elapsed.inMinutes;
     _timer = null;
     _ticker?.cancel();
     _ticker = null;
 
     if (minutes <= 0) {
       await _save();
+      await _liveActivity.end(elapsed: elapsed);
       notifyListeners();
       return null;
     }
@@ -267,24 +347,29 @@ class AppState extends ChangeNotifier {
     );
     _sessions.add(session);
     await _commit();
+    await _liveActivity.end(elapsed: elapsed);
     return session;
   }
 
   Future<void> cancelTimer() async {
+    final elapsed = timerElapsed;
     _timer = null;
     _ticker?.cancel();
     _ticker = null;
     await _save();
+    await _liveActivity.end(elapsed: elapsed);
     notifyListeners();
   }
 
   /// Wipes everything. Used by the reset action in settings.
   Future<void> clearAll() async {
+    final elapsed = timerElapsed;
     _sessions = [];
     _timer = null;
     _ticker?.cancel();
     _ticker = null;
     await _commit();
+    await _liveActivity.end(elapsed: elapsed);
   }
 
   // --- internals -----------------------------------------------------------
@@ -295,6 +380,18 @@ class AppState extends ChangeNotifier {
       if (_timer == null) return;
       notifyListeners();
     });
+  }
+
+  Future<void> _syncLiveActivity() async {
+    final running = _timer;
+    if (running == null) return;
+    await _liveActivity.update(
+      startedAt: running.startedAt,
+      elapsed: running.elapsedAt(now),
+      category: running.category.label,
+      goalMinutes: goals.focusMinutes,
+      isPaused: running.isPaused,
+    );
   }
 
   Future<void> _commit() async {
@@ -311,8 +408,11 @@ class AppState extends ChangeNotifier {
 
     _byDay = {
       for (final entry in grouped.entries)
-        entry.key:
-            DailySummary.fromSessions(entry.key, entry.value, goalsOn(entry.key)),
+        entry.key: DailySummary.fromSessions(
+          entry.key,
+          entry.value,
+          goalsOn(entry.key),
+        ),
     };
 
     final previousCounts = _awardCounts;

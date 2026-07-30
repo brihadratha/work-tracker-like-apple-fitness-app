@@ -75,7 +75,8 @@ class _ActivityRingsState extends State<ActivityRings>
     final t = Curves.easeOutCubic.transform(_controller.value.clamp(0.0, 1.0));
     return {
       for (final kind in RingKind.values)
-        kind: ((_from[kind] ?? 0) + ((_to[kind] ?? 0) - (_from[kind] ?? 0)) * t),
+        kind:
+            ((_from[kind] ?? 0) + ((_to[kind] ?? 0) - (_from[kind] ?? 0)) * t),
     };
   }
 
@@ -102,7 +103,10 @@ class _ActivityRingsState extends State<ActivityRings>
         animation: _controller,
         builder: (context, child) {
           return CustomPaint(
-            painter: _RingsPainter(progress: _currentValues(), strokeWidth: stroke),
+            painter: _RingsPainter(
+              progress: _currentValues(),
+              strokeWidth: stroke,
+            ),
             child: child,
           );
         },
@@ -166,10 +170,10 @@ class _RingsPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     // Half a stroke of air between rings leaves the innermost one a real
     // hollow centre instead of a filled dot.
-    final gap = strokeWidth * (minimal ? 0.35 : 0.5);
+    const gap = 0.0;
 
-    for (var i = 0; i < RingKind.values.length; i++) {
-      final kind = RingKind.values[i];
+    for (var i = 0; i < 1; i++) {
+      const kind = RingKind.focus;
       final radius = size.width / 2 - strokeWidth / 2 - i * (strokeWidth + gap);
       if (radius <= 0) continue;
       _paintRing(canvas, center, radius, kind, progress[kind] ?? 0);
@@ -242,7 +246,12 @@ class _RingsPainter extends CustomPainter {
   }
 
   /// The drop shadow cast by the leading tip onto the lap underneath.
-  void _paintCapShadow(Canvas canvas, Offset center, double radius, double angle) {
+  void _paintCapShadow(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    double angle,
+  ) {
     final tip = Offset(
       center.dx + radius * math.cos(angle),
       center.dy + radius * math.sin(angle),
@@ -250,7 +259,11 @@ class _RingsPainter extends CustomPainter {
     final shadow = Paint()
       ..color = Colors.black.withValues(alpha: 0.55)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, strokeWidth * 0.35);
-    canvas.drawCircle(tip.translate(0, strokeWidth * 0.1), strokeWidth * 0.62, shadow);
+    canvas.drawCircle(
+      tip.translate(0, strokeWidth * 0.1),
+      strokeWidth * 0.62,
+      shadow,
+    );
   }
 
   @override

@@ -21,7 +21,7 @@ class AwardCatalog {
   static const perfectDay = AwardDefinition(
     id: 'perfect_day',
     title: 'Perfect Day',
-    description: 'Close all three rings in a single day.',
+    description: 'Close your minutes ring in a single day.',
     icon: Icons.brightness_7_rounded,
     style: AwardStyle.perfect,
     repeatable: true,
@@ -30,7 +30,7 @@ class AwardCatalog {
   static const perfectWeek = AwardDefinition(
     id: 'perfect_week',
     title: 'Perfect Week',
-    description: 'Close all three rings every day of a calendar week.',
+    description: 'Close your minutes ring every day of a calendar week.',
     icon: Icons.calendar_view_week_rounded,
     style: AwardStyle.perfect,
     repeatable: true,
@@ -39,7 +39,7 @@ class AwardCatalog {
   static const perfectMonth = AwardDefinition(
     id: 'perfect_month',
     title: 'Perfect Month',
-    description: 'Close all three rings every day of a calendar month.',
+    description: 'Close your minutes ring every day of a calendar month.',
     icon: Icons.calendar_month_rounded,
     style: AwardStyle.perfect,
     repeatable: true,
@@ -104,7 +104,7 @@ class AwardCatalog {
   static const doubleFocus = AwardDefinition(
     id: 'double_focus',
     title: 'Double Focus',
-    description: 'Hit twice your Focus goal in one day.',
+    description: 'Hit twice your minutes goal in one day.',
     icon: Icons.bolt_rounded,
     style: AwardStyle.focus,
     repeatable: true,
@@ -113,7 +113,7 @@ class AwardCatalog {
   static const tripleFocus = AwardDefinition(
     id: 'triple_focus',
     title: 'Triple Focus',
-    description: 'Hit three times your Focus goal in one day.',
+    description: 'Hit three times your minutes goal in one day.',
     icon: Icons.rocket_launch_rounded,
     style: AwardStyle.focus,
     repeatable: true,
@@ -237,10 +237,16 @@ class AwardsEngine {
     required DateTime today,
   }) {
     final orderedDays = byDay.keys.toList()..sort();
-    final orderedSessions = [...sessions]..sort((a, b) => a.start.compareTo(b.start));
+    final orderedSessions = [...sessions]
+      ..sort((a, b) => a.start.compareTo(b.start));
 
     return <Award>[
-      _dayAward(AwardCatalog.perfectDay, orderedDays, byDay, (d) => d.isPerfect),
+      _dayAward(
+        AwardCatalog.perfectDay,
+        orderedDays,
+        byDay,
+        (d) => d.isPerfect,
+      ),
       _perfectWeekAward(byDay, today),
       _perfectMonthAward(byDay, today),
       ..._streakAwards(byDay, today),
@@ -257,10 +263,22 @@ class AwardsEngine {
         byDay,
         (d) => d.progressFor(RingKind.focus) >= 3,
       ),
-      _sessionAward(AwardCatalog.deepDive, orderedSessions, (s) => s.minutes >= 120),
-      _sessionAward(AwardCatalog.marathon, orderedSessions, (s) => s.minutes >= 180),
+      _sessionAward(
+        AwardCatalog.deepDive,
+        orderedSessions,
+        (s) => s.minutes >= 120,
+      ),
+      _sessionAward(
+        AwardCatalog.marathon,
+        orderedSessions,
+        (s) => s.minutes >= 180,
+      ),
       _hundredSessionsAward(orderedDays, byDay),
-      _sessionAward(AwardCatalog.earlyBird, orderedSessions, (s) => s.start.hour < 6),
+      _sessionAward(
+        AwardCatalog.earlyBird,
+        orderedSessions,
+        (s) => s.start.hour < 6,
+      ),
       _sessionAward(
         AwardCatalog.nightOwl,
         orderedSessions,
@@ -325,8 +343,10 @@ class AwardsEngine {
     for (final start in weekStarts) {
       final end = start.add(const Duration(days: 6));
       if (end.isAfter(normalizedToday)) continue;
-      final allPerfect = List.generate(7, (i) => start.add(Duration(days: i)))
-          .every((d) => byDay[d]?.isPerfect ?? false);
+      final allPerfect = List.generate(
+        7,
+        (i) => start.add(Duration(days: i)),
+      ).every((d) => byDay[d]?.isPerfect ?? false);
       if (allPerfect) earned.add(end);
     }
     earned.sort();
@@ -336,26 +356,35 @@ class AwardsEngine {
       timesEarned: earned.length,
       firstEarnedOn: earned.isEmpty ? null : earned.first,
       lastEarnedOn: earned.isEmpty ? null : earned.last,
-      progress: earned.isEmpty ? _currentWeekProgress(byDay, normalizedToday) : 1,
-      progressLabel: earned.isEmpty ? _currentWeekLabel(byDay, normalizedToday) : null,
+      progress: earned.isEmpty
+          ? _currentWeekProgress(byDay, normalizedToday)
+          : 1,
+      progressLabel: earned.isEmpty
+          ? _currentWeekLabel(byDay, normalizedToday)
+          : null,
     );
   }
 
-  double _currentWeekProgress(Map<DateTime, DailySummary> byDay, DateTime today) {
+  double _currentWeekProgress(
+    Map<DateTime, DailySummary> byDay,
+    DateTime today,
+  ) {
     final start = today.subtract(Duration(days: today.weekday - 1));
     final elapsed = today.difference(start).inDays + 1;
-    final perfect = List.generate(elapsed, (i) => start.add(Duration(days: i)))
-        .where((d) => byDay[d]?.isPerfect ?? false)
-        .length;
+    final perfect = List.generate(
+      elapsed,
+      (i) => start.add(Duration(days: i)),
+    ).where((d) => byDay[d]?.isPerfect ?? false).length;
     return perfect / 7;
   }
 
   String _currentWeekLabel(Map<DateTime, DailySummary> byDay, DateTime today) {
     final start = today.subtract(Duration(days: today.weekday - 1));
     final elapsed = today.difference(start).inDays + 1;
-    final perfect = List.generate(elapsed, (i) => start.add(Duration(days: i)))
-        .where((d) => byDay[d]?.isPerfect ?? false)
-        .length;
+    final perfect = List.generate(
+      elapsed,
+      (i) => start.add(Duration(days: i)),
+    ).where((d) => byDay[d]?.isPerfect ?? false).length;
     return '$perfect of 7 days this week';
   }
 
@@ -388,7 +417,11 @@ class AwardsEngine {
   }
 
   List<Award> _streakAwards(Map<DateTime, DailySummary> byDay, DateTime today) {
-    final streak = const StreakCalculator().compute(byDay, today, (d) => d.isPerfect);
+    final streak = const StreakCalculator().compute(
+      byDay,
+      today,
+      (d) => d.isPerfect,
+    );
     final best = streak.longest;
 
     Award milestone(AwardDefinition def, int target) {
@@ -435,8 +468,9 @@ class AwardsEngine {
         firstEarnedOn: earnedOn,
         lastEarnedOn: earnedOn,
         progress: (totalHours / target).clamp(0.0, 1.0),
-        progressLabel:
-            earnedOn != null ? null : '${totalHours.floor()} of $target hours',
+        progressLabel: earnedOn != null
+            ? null
+            : '${totalHours.floor()} of $target hours',
       );
     }
 
@@ -469,13 +503,15 @@ class AwardsEngine {
   }
 
   Award _weekendWarriorAward(Map<DateTime, DailySummary> byDay) {
-    final saturdays = byDay.keys.where((d) => d.weekday == DateTime.saturday).toList()
-      ..sort();
+    final saturdays =
+        byDay.keys.where((d) => d.weekday == DateTime.saturday).toList()
+          ..sort();
     final earned = <DateTime>[];
     for (final saturday in saturdays) {
       final sunday = saturday.add(const Duration(days: 1));
       final both =
-          (byDay[saturday]?.isPerfect ?? false) && (byDay[sunday]?.isPerfect ?? false);
+          (byDay[saturday]?.isPerfect ?? false) &&
+          (byDay[sunday]?.isPerfect ?? false);
       if (both) earned.add(sunday);
     }
     return Award(
@@ -497,7 +533,9 @@ class AwardsEngine {
     final earned = <DateTime>[];
     for (var i = 1; i < workedDays.length; i++) {
       final gap = workedDays[i].difference(workedDays[i - 1]).inDays;
-      if (gap >= 8 && byDay[workedDays[i]]!.isPerfect) earned.add(workedDays[i]);
+      if (gap >= 8 && byDay[workedDays[i]]!.isPerfect) {
+        earned.add(workedDays[i]);
+      }
     }
     return Award(
       definition: AwardCatalog.comeback,
@@ -517,8 +555,9 @@ class AwardsEngine {
       closesByMonth.update(month, (v) => v + 1, ifAbsent: () => 1);
     }
 
-    final earned = closesByMonth.entries.where((e) => e.value >= target).toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final earned =
+        closesByMonth.entries.where((e) => e.value >= target).toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
     final best = closesByMonth.values.fold(0, (a, b) => a > b ? a : b);
 
     return Award(

@@ -34,15 +34,11 @@ void main() {
 
     test('sums focus minutes and counts only long enough blocks as deep', () {
       final day = DateTime(2026, 7, 20);
-      final summary = DailySummary.fromSessions(
-        day,
-        [
-          _session(start: day.add(const Duration(hours: 9)), minutes: 50),
-          _session(start: day.add(const Duration(hours: 11)), minutes: 25),
-          _session(start: day.add(const Duration(hours: 13)), minutes: 10),
-        ],
-        goals,
-      );
+      final summary = DailySummary.fromSessions(day, [
+        _session(start: day.add(const Duration(hours: 9)), minutes: 50),
+        _session(start: day.add(const Duration(hours: 11)), minutes: 25),
+        _session(start: day.add(const Duration(hours: 13)), minutes: 10),
+      ], goals);
 
       expect(summary.focusMinutes, 85);
       // 50 and 25 clear the 25-minute bar; the 10-minute block doesn't.
@@ -53,11 +49,12 @@ void main() {
 
     test('counts every clock hour a block touches', () {
       final day = DateTime(2026, 7, 20);
-      final summary = DailySummary.fromSessions(
-        day,
-        [_session(start: day.add(const Duration(hours: 9, minutes: 50)), minutes: 40)],
-        goals,
-      );
+      final summary = DailySummary.fromSessions(day, [
+        _session(
+          start: day.add(const Duration(hours: 9, minutes: 50)),
+          minutes: 40,
+        ),
+      ], goals);
 
       // 09:50 → 10:30 spans the 9 o'clock and 10 o'clock hours.
       expect(summary.activeHourSlots, {9, 10});
@@ -66,22 +63,18 @@ void main() {
 
     test('a block ending exactly on the hour does not claim the next hour', () {
       final day = DateTime(2026, 7, 20);
-      final summary = DailySummary.fromSessions(
-        day,
-        [_session(start: day.add(const Duration(hours: 9)), minutes: 60)],
-        goals,
-      );
+      final summary = DailySummary.fromSessions(day, [
+        _session(start: day.add(const Duration(hours: 9)), minutes: 60),
+      ], goals);
 
       expect(summary.activeHourSlots, {9});
     });
 
     test('a block running past midnight is capped at its starting day', () {
       final day = DateTime(2026, 7, 20);
-      final summary = DailySummary.fromSessions(
-        day,
-        [_session(start: day.add(const Duration(hours: 23)), minutes: 180)],
-        goals,
-      );
+      final summary = DailySummary.fromSessions(day, [
+        _session(start: day.add(const Duration(hours: 23)), minutes: 180),
+      ], goals);
 
       expect(summary.activeHourSlots, {23});
       expect(summary.activeHours, 1);
@@ -89,17 +82,15 @@ void main() {
 
     test('progress is uncapped so a double day reads as 200%', () {
       final day = DateTime(2026, 7, 20);
-      final summary = DailySummary.fromSessions(
-        day,
-        [_session(start: day.add(const Duration(hours: 8)), minutes: 480)],
-        goals,
-      );
+      final summary = DailySummary.fromSessions(day, [
+        _session(start: day.add(const Duration(hours: 8)), minutes: 480),
+      ], goals);
 
       expect(summary.progressFor(RingKind.focus), 2.0);
       expect(summary.isClosed(RingKind.focus), isTrue);
     });
 
-    test('a perfect day needs all three rings', () {
+    test('closing the minutes ring makes a complete day', () {
       final day = DateTime(2026, 7, 20);
       // 8 blocks of 30 min, one per hour: 240 focus, 8 deep, 8 active hours.
       final sessions = [
@@ -112,7 +103,7 @@ void main() {
       expect(summary.deepSessions, 8);
       expect(summary.activeHours, 8);
       expect(summary.isPerfect, isTrue);
-      expect(summary.closedRingCount, 3);
+      expect(summary.closedRingCount, 1);
     });
   });
 
@@ -175,11 +166,9 @@ void main() {
         final day = _today.subtract(Duration(days: offset));
         final minutes = minutesFor(offset);
         if (minutes <= 0) continue;
-        byDay[day] = DailySummary.fromSessions(
-          day,
-          [_session(start: day.add(const Duration(hours: 9)), minutes: minutes)],
-          goals,
-        );
+        byDay[day] = DailySummary.fromSessions(day, [
+          _session(start: day.add(const Duration(hours: 9)), minutes: minutes),
+        ], goals);
       }
       return byDay;
     }
@@ -222,9 +211,9 @@ void main() {
     const goals = Goals();
 
     List<WorkSession> perfectDaySessions(DateTime day) => [
-          for (var hour = 9; hour < 17; hour++)
-            _session(start: day.add(Duration(hours: hour)), minutes: 30),
-        ];
+      for (var hour = 9; hour < 17; hour++)
+        _session(start: day.add(Duration(hours: hour)), minutes: 30),
+    ];
 
     ({Map<DateTime, DailySummary> byDay, List<WorkSession> sessions}) build(
       List<DateTime> perfectDays, {
@@ -258,9 +247,12 @@ void main() {
     });
 
     test('the first block unlocks its badge', () {
-      final data = build([], extra: [
-        _session(start: _today.add(const Duration(hours: 9)), minutes: 30),
-      ]);
+      final data = build(
+        [],
+        extra: [
+          _session(start: _today.add(const Duration(hours: 9)), minutes: 30),
+        ],
+      );
       final awards = engine.evaluate(
         byDay: data.byDay,
         sessions: data.sessions,
@@ -317,7 +309,9 @@ void main() {
     });
 
     test('streak milestones track the longest run', () {
-      final days = [for (var i = 0; i < 8; i++) _today.subtract(Duration(days: i))];
+      final days = [
+        for (var i = 0; i < 8; i++) _today.subtract(Duration(days: i)),
+      ];
       final data = build(days);
       final awards = engine.evaluate(
         byDay: data.byDay,
@@ -332,9 +326,12 @@ void main() {
     });
 
     test('long single blocks earn Deep Dive and Marathon', () {
-      final data = build([], extra: [
-        _session(start: _today.add(const Duration(hours: 9)), minutes: 190),
-      ]);
+      final data = build(
+        [],
+        extra: [
+          _session(start: _today.add(const Duration(hours: 9)), minutes: 190),
+        ],
+      );
       final awards = engine.evaluate(
         byDay: data.byDay,
         sessions: data.sessions,
@@ -346,10 +343,16 @@ void main() {
     });
 
     test('odd-hours badges pick up early and late blocks', () {
-      final data = build([], extra: [
-        _session(start: _today.add(const Duration(hours: 5)), minutes: 45),
-        _session(start: _today.add(const Duration(hours: 23, minutes: 10)), minutes: 40),
-      ]);
+      final data = build(
+        [],
+        extra: [
+          _session(start: _today.add(const Duration(hours: 5)), minutes: 45),
+          _session(
+            start: _today.add(const Duration(hours: 23, minutes: 10)),
+            minutes: 40,
+          ),
+        ],
+      );
       final awards = engine.evaluate(
         byDay: data.byDay,
         sessions: data.sessions,
@@ -361,9 +364,15 @@ void main() {
     });
 
     test('locked hour milestones report how far along they are', () {
-      final data = build([], extra: [
-        _session(start: _today.add(const Duration(hours: 9)), minutes: 60 * 40),
-      ]);
+      final data = build(
+        [],
+        extra: [
+          _session(
+            start: _today.add(const Duration(hours: 9)),
+            minutes: 60 * 40,
+          ),
+        ],
+      );
       final awards = engine.evaluate(
         byDay: data.byDay,
         sessions: data.sessions,
@@ -400,12 +409,20 @@ void main() {
     });
 
     test('a zero-length block is ignored', () async {
-      await state.addSession(start: _now, minutes: 0, category: WorkCategory.admin);
+      await state.addSession(
+        start: _now,
+        minutes: 0,
+        category: WorkCategory.admin,
+      );
       expect(state.sessions, isEmpty);
     });
 
     test('deleting a block rolls the rings back', () async {
-      await state.addSession(start: _now, minutes: 45, category: WorkCategory.admin);
+      await state.addSession(
+        start: _now,
+        minutes: 45,
+        category: WorkCategory.admin,
+      );
       final id = state.sessions.single.id;
 
       await state.deleteSession(id);
@@ -433,6 +450,32 @@ void main() {
       expect(timed.isTimerRunning, isFalse);
       expect(timed.todaySummary.focusMinutes, 42);
       timed.dispose();
+    });
+
+    test('pause excludes break time and survives a reload', () async {
+      final store = InMemoryPersistence();
+      var clock = _now;
+      final first = AppState(persistence: store, clock: () => clock);
+      await first.load();
+
+      await first.startTimer(WorkCategory.deepWork);
+      clock = _now.add(const Duration(minutes: 20));
+      await first.pauseTimer();
+      expect(first.isTimerPaused, isTrue);
+      expect(first.timerElapsed, const Duration(minutes: 20));
+
+      clock = _now.add(const Duration(hours: 1));
+      first.dispose();
+      final second = AppState(persistence: store, clock: () => clock);
+      await second.load();
+      expect(second.isTimerPaused, isTrue);
+      expect(second.timerElapsed, const Duration(minutes: 20));
+
+      await second.resumeTimer();
+      clock = _now.add(const Duration(hours: 1, minutes: 15));
+      final session = await second.stopTimer();
+      expect(session!.minutes, 35);
+      second.dispose();
     });
 
     test('a sub-minute timer is discarded rather than logged', () async {
@@ -512,7 +555,11 @@ void main() {
     });
 
     test('crossing an award threshold queues a celebration', () async {
-      await state.addSession(start: _now, minutes: 200, category: WorkCategory.admin);
+      await state.addSession(
+        start: _now,
+        minutes: 200,
+        category: WorkCategory.admin,
+      );
 
       final celebrations = state.takeCelebrations();
       expect(celebrations.map((a) => a.id), contains('deep_dive'));
@@ -521,7 +568,11 @@ void main() {
     });
 
     test('a new goal applies to today', () async {
-      await state.addSession(start: _now, minutes: 240, category: WorkCategory.admin);
+      await state.addSession(
+        start: _now,
+        minutes: 240,
+        category: WorkCategory.admin,
+      );
       expect(state.todaySummary.isClosed(RingKind.focus), isTrue);
 
       await state.setGoals(const Goals(focusMinutes: 480));
@@ -566,19 +617,22 @@ void main() {
       expect(state.totalPerfectDays, 10);
     });
 
-    test('lowering a goal does not hand out past days you did not earn', () async {
-      final yesterday = _today.subtract(const Duration(days: 1));
-      await state.addSession(
-        start: yesterday.add(const Duration(hours: 9)),
-        minutes: 60,
-        category: WorkCategory.admin,
-      );
-      expect(state.summaryFor(yesterday).isClosed(RingKind.focus), isFalse);
+    test(
+      'lowering a goal does not hand out past days you did not earn',
+      () async {
+        final yesterday = _today.subtract(const Duration(days: 1));
+        await state.addSession(
+          start: yesterday.add(const Duration(hours: 9)),
+          minutes: 60,
+          category: WorkCategory.admin,
+        );
+        expect(state.summaryFor(yesterday).isClosed(RingKind.focus), isFalse);
 
-      await state.setGoals(const Goals(focusMinutes: 30));
+        await state.setGoals(const Goals(focusMinutes: 30));
 
-      expect(state.summaryFor(yesterday).isClosed(RingKind.focus), isFalse);
-    });
+        expect(state.summaryFor(yesterday).isClosed(RingKind.focus), isFalse);
+      },
+    );
 
     test('each goal change applies from the day it was made', () async {
       var clock = _now.subtract(const Duration(days: 5));
@@ -626,32 +680,40 @@ void main() {
       second.dispose();
     });
 
-    test('a store written before goals were dated keeps its history intact',
-        () async {
-      final yesterday = _today.subtract(const Duration(days: 1));
-      final store = InMemoryPersistence({
-        'version': 1,
-        'goals': const Goals(focusMinutes: 120).toJson(),
-        'sessions': [
-          {
-            'id': 'legacy',
-            'start': yesterday.add(const Duration(hours: 9)).toIso8601String(),
-            'minutes': 120,
-            'category': 'admin',
-          },
-        ],
-      });
-      final migrated = AppState(persistence: store, clock: () => _now);
-      await migrated.load();
+    test(
+      'a store written before goals were dated keeps its history intact',
+      () async {
+        final yesterday = _today.subtract(const Duration(days: 1));
+        final store = InMemoryPersistence({
+          'version': 1,
+          'goals': const Goals(focusMinutes: 120).toJson(),
+          'sessions': [
+            {
+              'id': 'legacy',
+              'start': yesterday
+                  .add(const Duration(hours: 9))
+                  .toIso8601String(),
+              'minutes': 120,
+              'category': 'admin',
+            },
+          ],
+        });
+        final migrated = AppState(persistence: store, clock: () => _now);
+        await migrated.load();
 
-      // The old single goal applied to every day, so yesterday stays closed.
-      expect(migrated.goals.focusMinutes, 120);
-      expect(migrated.summaryFor(yesterday).isClosed(RingKind.focus), isTrue);
-      migrated.dispose();
-    });
+        // The old single goal applied to every day, so yesterday stays closed.
+        expect(migrated.goals.focusMinutes, 120);
+        expect(migrated.summaryFor(yesterday).isClosed(RingKind.focus), isTrue);
+        migrated.dispose();
+      },
+    );
 
     test('reset clears everything', () async {
-      await state.addSession(start: _now, minutes: 60, category: WorkCategory.admin);
+      await state.addSession(
+        start: _now,
+        minutes: 60,
+        category: WorkCategory.admin,
+      );
       await state.clearAll();
 
       expect(state.sessions, isEmpty);
