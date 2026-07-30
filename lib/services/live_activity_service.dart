@@ -1,6 +1,23 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+enum LiveActivityActionType { pause, resume, stop }
+
+@immutable
+class LiveActivityAction {
+  const LiveActivityAction({
+    required this.type,
+    required this.sessionId,
+    required this.elapsed,
+    required this.occurredAt,
+  });
+
+  final LiveActivityActionType type;
+  final String sessionId;
+  final Duration elapsed;
+  final DateTime occurredAt;
+}
+
 /// Best-effort bridge to the iPhone Lock Screen and Dynamic Island timer.
 class LiveActivityService {
   const LiveActivityService();
@@ -8,11 +25,13 @@ class LiveActivityService {
   static const _channel = MethodChannel('ai.atiq.workRings/live_activity');
 
   Future<void> start({
+    required String sessionId,
     required DateTime startedAt,
     required Duration elapsed,
     required String category,
     required int goalMinutes,
   }) => _invoke('start', {
+    'sessionId': sessionId,
     'startedAt': startedAt.millisecondsSinceEpoch,
     'elapsedSeconds': elapsed.inSeconds,
     'category': category,
@@ -20,12 +39,14 @@ class LiveActivityService {
   });
 
   Future<void> update({
+    required String sessionId,
     required DateTime startedAt,
     required Duration elapsed,
     required String category,
     required int goalMinutes,
     required bool isPaused,
   }) => _invoke('update', {
+    'sessionId': sessionId,
     'startedAt': startedAt.millisecondsSinceEpoch,
     'elapsedSeconds': elapsed.inSeconds,
     'category': category,
@@ -33,15 +54,68 @@ class LiveActivityService {
     'isPaused': isPaused,
   });
 
-  Future<void> end({required Duration elapsed}) =>
-      _invoke('end', {'elapsedSeconds': elapsed.inSeconds});
+  /// Makes ActivityKit exactly mirror the app's current session, recreating a
+  /// missing activity and removing any activity left over from an older one.
+  Future<void> synchronize({
+    required String sessionId,
+    required DateTime startedAt,
+    required Duration elapsed,
+    required String category,
+    required int goalMinutes,
+    required bool isPaused,
+  }) => _invoke('synchronize', {
+    'sessionId': sessionId,
+    'startedAt': startedAt.millisecondsSinceEpoch,
+    'elapsedSeconds': elapsed.inSeconds,
+    'category': category,
+    'goalMinutes': goalMinutes,
+    'isPaused': isPaused,
+  });
 
-  /// Returns a stop duration requested from the Live Activity, once.
-  Future<Duration?> takeStoppedElapsed() async {
+  Future<Duration?> end({required Duration elapsed, String? sessionId}) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
     try {
-      final seconds = await _channel.invokeMethod<num>('takeStopRequest');
+      final seconds = await _channel.invokeMethod<num>('end', {
+        'elapsedSeconds': elapsed.inSeconds,
+        'sessionId': ?sessionId,
+      });
       return seconds == null ? null : Duration(seconds: seconds.round());
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  /// Returns the latest action performed in the Live Activity exactly once.
+  Future<LiveActivityAction?> takePendingAction() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
+    try {
+      final raw = await _channel.invokeMapMethod<String, dynamic>(
+        'takePendingAction',
+      );
+      if (raw == null) return null;
+      final type = switch (raw['type']) {
+        'pause' => LiveActivityActionType.pause,
+        'resume' => LiveActivityActionType.resume,
+        'stop' => LiveActivityActionType.stop,
+        _ => null,
+      };
+      final sessionId = raw['sessionId'] as String?;
+      final seconds = raw['elapsedSeconds'] as num?;
+      final occurredAt = raw['occurredAt'] as num?;
+      if (type == null ||
+          sessionId == null ||
+          seconds == null ||
+          occurredAt == null) {
+        return null;
+      }
+      return LiveActivityAction(
+        type: type,
+        sessionId: sessionId,
+        elapsed: Duration(seconds: seconds.round()),
+        occurredAt: DateTime.fromMillisecondsSinceEpoch(occurredAt.round()),
+      );
     } on MissingPluginException {
       return null;
     } on PlatformException {

@@ -88,14 +88,15 @@ struct WorkSessionLiveActivity: Widget {
   ) -> some View {
     if #available(iOSApplicationExtension 17.0, *) {
       HStack(spacing: compact ? 10 : 8) {
-        Link(destination: URL(string: "workrings://timer")!) {
+        Button(intent: ToggleWorkSessionIntent(sessionID: context.attributes.sessionID)) {
           Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
             .font(.system(size: compact ? 15 : 14, weight: .bold))
             .foregroundStyle(compact ? ringRed : Color.black)
             .frame(width: compact ? 32 : 38, height: compact ? 32 : 38)
             .background(compact ? Color.white.opacity(0.12) : Color.white, in: Circle())
         }
-        Button(intent: StopWorkSessionIntent()) {
+        .buttonStyle(.plain)
+        Button(intent: StopWorkSessionIntent(sessionID: context.attributes.sessionID)) {
           Image(systemName: "stop.fill")
             .font(.system(size: compact ? 14 : 13, weight: .bold))
             .foregroundStyle(.white)

@@ -30,6 +30,7 @@ class RunningTimer {
   final DateTime? resumedAt;
 
   bool get isPaused => resumedAt == null;
+  String get sessionId => startedAt.millisecondsSinceEpoch.toString();
 
   Duration elapsedAt(DateTime now) {
     final activeSinceResume = resumedAt == null
@@ -90,7 +91,9 @@ class AppState extends ChangeNotifier {
   GoalHistory _goalHistory = GoalHistory.fromStart(const Goals());
   RunningTimer? _timer;
   Timer? _ticker;
+  Timer? _liveActivityPoller;
   bool _loaded = false;
+  Future<void>? _reconciliation;
 
   /// Derived caches, rebuilt whenever sessions or goals change.
   Map<DateTime, DailySummary> _byDay = {};
@@ -209,7 +212,9 @@ class AppState extends ChangeNotifier {
 
     _recompute(collectCelebrations: false);
     if (_timer != null && !_timer!.isPaused) _startTicker();
+    if (_timer != null) _startLiveActivityPoller();
     _loaded = true;
+    await reconcileLiveActivityActions();
     notifyListeners();
   }
 
@@ -224,6 +229,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _ticker?.cancel();
+    _liveActivityPoller?.cancel();
     super.dispose();
   }
 
@@ -269,6 +275,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> startTimer(WorkCategory category) async {
+    await reconcileLiveActivityActions();
     if (_timer != null) return;
     final startedAt = now;
     _timer = RunningTimer(
@@ -278,8 +285,10 @@ class AppState extends ChangeNotifier {
       resumedAt: startedAt,
     );
     _startTicker();
+    _startLiveActivityPoller();
     await _save();
     await _liveActivity.start(
+      sessionId: _timer!.sessionId,
       startedAt: startedAt,
       elapsed: Duration.zero,
       category: category.label,
@@ -289,6 +298,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> pauseTimer() async {
+    await reconcileLiveActivityActions(synchronize: false);
     final running = _timer;
     if (running == null || running.isPaused) return;
     final elapsed = running.elapsedAt(now);
@@ -306,6 +316,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> resumeTimer() async {
+    await reconcileLiveActivityActions(synchronize: false);
     final running = _timer;
     if (running == null || !running.isPaused) return;
     _timer = RunningTimer(
@@ -322,18 +333,27 @@ class AppState extends ChangeNotifier {
 
   /// Stops the timer and logs it, unless it ran for less than a minute.
   Future<WorkSession?> stopTimer({String? note}) async {
+    await reconcileLiveActivityActions(synchronize: false);
     final running = _timer;
     if (running == null) return null;
 
-    final elapsed = running.elapsedAt(now);
-    final minutes = elapsed.inMinutes;
-    _timer = null;
+    // Freeze Flutter polling while native resolves any intent that landed at
+    // the same boundary. ActivityKit returns the authoritative elapsed value.
     _ticker?.cancel();
     _ticker = null;
+    _liveActivityPoller?.cancel();
+    _liveActivityPoller = null;
+    final fallbackElapsed = running.elapsedAt(now);
+    final nativeElapsed = await _liveActivity.end(
+      elapsed: fallbackElapsed,
+      sessionId: running.sessionId,
+    );
+    final elapsed = nativeElapsed ?? fallbackElapsed;
+    final minutes = elapsed.inMinutes;
+    _timer = null;
 
     if (minutes <= 0) {
       await _save();
-      await _liveActivity.end(elapsed: elapsed);
       notifyListeners();
       return null;
     }
@@ -347,55 +367,119 @@ class AppState extends ChangeNotifier {
     );
     _sessions.add(session);
     await _commit();
-    await _liveActivity.end(elapsed: elapsed);
     return session;
   }
 
-  /// Reconciles a stop pressed on the Lock Screen or Dynamic Island.
-  Future<void> reconcileLiveActivityActions() async {
-    final elapsed = await _liveActivity.takeStoppedElapsed();
-    final running = _timer;
-    if (elapsed == null || running == null) return;
+  /// Reconciles a pause, resume, or stop performed from the Lock Screen or
+  /// Dynamic Island, then makes ActivityKit mirror the resulting app state.
+  /// Concurrent lifecycle and button-triggered reconciliations share one pass
+  /// so a fast app-side Stop cannot race a Lock Screen pause.
+  Future<void> reconcileLiveActivityActions({bool synchronize = true}) async {
+    final pending = _reconciliation;
+    if (pending != null) {
+      await pending;
+      if (synchronize) await _synchronizeLiveActivityState();
+      return;
+    }
 
-    _timer = null;
-    _ticker?.cancel();
-    _ticker = null;
-    final minutes = elapsed.inMinutes;
-    if (minutes > 0) {
-      _sessions.add(
-        WorkSession(
-          id: _newId(),
-          start: running.startedAt,
-          minutes: minutes,
+    final completer = Completer<void>();
+    _reconciliation = completer.future;
+    try {
+      await _applyPendingLiveActivityAction();
+      if (synchronize) await _synchronizeLiveActivityState();
+    } finally {
+      _reconciliation = null;
+      completer.complete();
+    }
+  }
+
+  Future<void> _applyPendingLiveActivityAction() async {
+    final action = await _liveActivity.takePendingAction();
+    final running = _timer;
+    if (action == null || running == null) return;
+
+    // An intent from an activity belonging to an older session must never
+    // pause, resume, or stop the current timer.
+    if (action.sessionId != running.sessionId) return;
+
+    switch (action.type) {
+      case LiveActivityActionType.pause:
+        _timer = RunningTimer(
+          startedAt: running.startedAt,
           category: running.category,
-        ),
-      );
-      await _commit();
-    } else {
-      await _save();
-      notifyListeners();
+          accumulated: action.elapsed,
+          resumedAt: null,
+        );
+        _ticker?.cancel();
+        _ticker = null;
+        await _save();
+        notifyListeners();
+        return;
+      case LiveActivityActionType.resume:
+        final resumedAt = action.occurredAt.isAfter(now)
+            ? now
+            : action.occurredAt;
+        _timer = RunningTimer(
+          startedAt: running.startedAt,
+          category: running.category,
+          accumulated: action.elapsed,
+          resumedAt: resumedAt,
+        );
+        _startTicker();
+        await _save();
+        notifyListeners();
+        return;
+      case LiveActivityActionType.stop:
+        _timer = null;
+        _ticker?.cancel();
+        _ticker = null;
+        _liveActivityPoller?.cancel();
+        _liveActivityPoller = null;
+        final minutes = action.elapsed.inMinutes;
+        if (minutes > 0) {
+          _sessions.add(
+            WorkSession(
+              id: _newId(),
+              start: running.startedAt,
+              minutes: minutes,
+              category: running.category,
+            ),
+          );
+          await _commit();
+        } else {
+          await _save();
+          notifyListeners();
+        }
+        return;
     }
   }
 
   Future<void> cancelTimer() async {
+    await reconcileLiveActivityActions(synchronize: false);
+    final running = _timer;
     final elapsed = timerElapsed;
     _timer = null;
     _ticker?.cancel();
     _ticker = null;
+    _liveActivityPoller?.cancel();
+    _liveActivityPoller = null;
     await _save();
-    await _liveActivity.end(elapsed: elapsed);
+    await _liveActivity.end(elapsed: elapsed, sessionId: running?.sessionId);
     notifyListeners();
   }
 
   /// Wipes everything. Used by the reset action in settings.
   Future<void> clearAll() async {
+    final running = _timer;
     final elapsed = timerElapsed;
     _sessions = [];
     _timer = null;
     _ticker?.cancel();
     _ticker = null;
+    _liveActivityPoller?.cancel();
+    _liveActivityPoller = null;
     await _commit();
-    await _liveActivity.end(elapsed: elapsed);
+    await _liveActivity.end(elapsed: elapsed, sessionId: running?.sessionId);
   }
 
   // --- internals -----------------------------------------------------------
@@ -408,10 +492,27 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  void _startLiveActivityPoller() {
+    _liveActivityPoller?.cancel();
+    _liveActivityPoller = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_timer == null) return;
+      unawaited(reconcileLiveActivityActions(synchronize: false));
+    });
+  }
+
+  Future<void> _synchronizeLiveActivityState() async {
+    if (_timer == null) {
+      await _liveActivity.end(elapsed: Duration.zero);
+      return;
+    }
+    await _syncLiveActivity();
+  }
+
   Future<void> _syncLiveActivity() async {
     final running = _timer;
     if (running == null) return;
-    await _liveActivity.update(
+    await _liveActivity.synchronize(
+      sessionId: running.sessionId,
       startedAt: running.startedAt,
       elapsed: running.elapsedAt(now),
       category: running.category.label,

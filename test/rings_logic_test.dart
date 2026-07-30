@@ -15,16 +15,37 @@ import 'package:work_rings/theme/app_theme.dart';
 final _now = DateTime(2026, 7, 27, 14, 30);
 DateTime get _today => DateTime(_now.year, _now.month, _now.day);
 
-class _StopRequestLiveActivity extends LiveActivityService {
-  _StopRequestLiveActivity(this.elapsed);
-
-  Duration? elapsed;
+class _FakeLiveActivity extends LiveActivityService {
+  LiveActivityAction? pendingAction;
+  int endCalls = 0;
+  int synchronizeCalls = 0;
+  String? synchronizedSessionId;
+  Duration? authoritativeEndElapsed;
 
   @override
-  Future<Duration?> takeStoppedElapsed() async {
-    final value = elapsed;
-    elapsed = null;
+  Future<LiveActivityAction?> takePendingAction() async {
+    final value = pendingAction;
+    pendingAction = null;
     return value;
+  }
+
+  @override
+  Future<void> synchronize({
+    required String sessionId,
+    required DateTime startedAt,
+    required Duration elapsed,
+    required String category,
+    required int goalMinutes,
+    required bool isPaused,
+  }) async {
+    synchronizeCalls++;
+    synchronizedSessionId = sessionId;
+  }
+
+  @override
+  Future<Duration?> end({required Duration elapsed, String? sessionId}) async {
+    endCalls++;
+    return authoritativeEndElapsed;
   }
 }
 
@@ -512,9 +533,62 @@ void main() {
 
     test('a Live Activity stop saves the exact handed-off duration', () async {
       var clock = _now;
-      final liveActivity = _StopRequestLiveActivity(
-        const Duration(minutes: 18),
+      final liveActivity = _FakeLiveActivity();
+      final timed = AppState(
+        persistence: InMemoryPersistence(),
+        clock: () => clock,
+        liveActivity: liveActivity,
       );
+      await timed.load();
+      await timed.startTimer(WorkCategory.creative);
+      liveActivity.pendingAction = LiveActivityAction(
+        type: LiveActivityActionType.stop,
+        sessionId: timed.timer!.sessionId,
+        elapsed: const Duration(minutes: 18),
+        occurredAt: _now.add(const Duration(minutes: 18)),
+      );
+      clock = _now.add(const Duration(hours: 2));
+
+      await timed.reconcileLiveActivityActions();
+
+      expect(timed.isTimerRunning, isFalse);
+      expect(timed.sessions.single.minutes, 18);
+      expect(await liveActivity.takePendingAction(), isNull);
+      timed.dispose();
+    });
+
+    test('Lock Screen pause is applied before an immediate app stop', () async {
+      var clock = _now;
+      final liveActivity = _FakeLiveActivity();
+      final timed = AppState(
+        persistence: InMemoryPersistence(),
+        clock: () => clock,
+        liveActivity: liveActivity,
+      );
+      await timed.load();
+      await timed.startTimer(WorkCategory.deepWork);
+      final sessionId = timed.timer!.sessionId;
+      clock = _now.add(const Duration(minutes: 20));
+      liveActivity.pendingAction = LiveActivityAction(
+        type: LiveActivityActionType.pause,
+        sessionId: sessionId,
+        elapsed: const Duration(minutes: 20),
+        occurredAt: clock,
+      );
+      final endsBeforeStop = liveActivity.endCalls;
+
+      final session = await timed.stopTimer();
+
+      expect(session!.minutes, 20);
+      expect(timed.isTimerRunning, isFalse);
+      expect(liveActivity.endCalls, endsBeforeStop + 1);
+      timed.dispose();
+    });
+
+    test('app stop uses native timing at an intent race boundary', () async {
+      var clock = _now;
+      final liveActivity = _FakeLiveActivity()
+        ..authoritativeEndElapsed = const Duration(minutes: 18);
       final timed = AppState(
         persistence: InMemoryPersistence(),
         clock: () => clock,
@@ -524,13 +598,82 @@ void main() {
       await timed.startTimer(WorkCategory.creative);
       clock = _now.add(const Duration(hours: 2));
 
-      await timed.reconcileLiveActivityActions();
+      final session = await timed.stopTimer();
 
-      expect(timed.isTimerRunning, isFalse);
-      expect(timed.sessions.single.minutes, 18);
-      expect(await liveActivity.takeStoppedElapsed(), isNull);
+      expect(session!.minutes, 18);
+      expect(timed.timerElapsed, Duration.zero);
       timed.dispose();
     });
+
+    test('Lock Screen pause and resume preserve exact active time', () async {
+      var clock = _now;
+      final liveActivity = _FakeLiveActivity();
+      final timed = AppState(
+        persistence: InMemoryPersistence(),
+        clock: () => clock,
+        liveActivity: liveActivity,
+      );
+      await timed.load();
+      await timed.startTimer(WorkCategory.learning);
+      final sessionId = timed.timer!.sessionId;
+
+      clock = _now.add(const Duration(minutes: 12));
+      liveActivity.pendingAction = LiveActivityAction(
+        type: LiveActivityActionType.pause,
+        sessionId: sessionId,
+        elapsed: const Duration(minutes: 12),
+        occurredAt: clock,
+      );
+      await timed.reconcileLiveActivityActions();
+      expect(timed.isTimerPaused, isTrue);
+      expect(timed.timerElapsed, const Duration(minutes: 12));
+
+      clock = _now.add(const Duration(hours: 1));
+      liveActivity.pendingAction = LiveActivityAction(
+        type: LiveActivityActionType.resume,
+        sessionId: sessionId,
+        elapsed: const Duration(minutes: 12),
+        occurredAt: clock,
+      );
+      clock = clock.add(const Duration(minutes: 8));
+      await timed.reconcileLiveActivityActions();
+
+      expect(timed.isTimerPaused, isFalse);
+      expect(timed.timerElapsed, const Duration(minutes: 20));
+      expect(liveActivity.synchronizedSessionId, sessionId);
+      timed.dispose();
+    });
+
+    test(
+      'an action from a stale activity cannot mutate a new session',
+      () async {
+        var clock = _now;
+        final liveActivity = _FakeLiveActivity();
+        final timed = AppState(
+          persistence: InMemoryPersistence(),
+          clock: () => clock,
+          liveActivity: liveActivity,
+        );
+        await timed.load();
+        await timed.startTimer(WorkCategory.admin);
+        final sessionId = timed.timer!.sessionId;
+        liveActivity.pendingAction = LiveActivityAction(
+          type: LiveActivityActionType.stop,
+          sessionId: 'an-older-session',
+          elapsed: const Duration(hours: 3),
+          occurredAt: _now,
+        );
+        clock = _now.add(const Duration(minutes: 7));
+
+        await timed.reconcileLiveActivityActions();
+
+        expect(timed.isTimerRunning, isTrue);
+        expect(timed.sessions, isEmpty);
+        expect(timed.timerElapsed, const Duration(minutes: 7));
+        expect(liveActivity.synchronizedSessionId, sessionId);
+        timed.dispose();
+      },
+    );
 
     test('a sub-minute timer is discarded rather than logged', () async {
       await state.startTimer(WorkCategory.deepWork);

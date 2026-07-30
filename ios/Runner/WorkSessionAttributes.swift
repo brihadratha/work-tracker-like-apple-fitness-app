@@ -9,6 +9,7 @@ struct WorkSessionAttributes: ActivityAttributes {
     var isPaused: Bool
   }
 
+  var sessionID: String
   var category: String
   var goalMinutes: Int
 }
