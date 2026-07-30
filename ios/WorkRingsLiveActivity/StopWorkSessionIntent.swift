@@ -24,11 +24,12 @@ private enum LiveActivityActionStore {
   }
 }
 
-@available(iOSApplicationExtension 17.0, *)
+@available(iOS 17.0, *)
 struct ToggleWorkSessionIntent: LiveActivityIntent {
   static var title: LocalizedStringResource = "Pause or Resume Focus Session"
   static var description = IntentDescription("Pauses or resumes the active focus session.")
-  static var openAppWhenRun = false
+  static var openAppWhenRun: Bool = false
+  static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
   @Parameter(title: "Session") var sessionID: String
 
@@ -72,11 +73,12 @@ struct ToggleWorkSessionIntent: LiveActivityIntent {
   }
 }
 
-@available(iOSApplicationExtension 17.0, *)
+@available(iOS 17.0, *)
 struct StopWorkSessionIntent: LiveActivityIntent {
   static var title: LocalizedStringResource = "Stop Focus Session"
   static var description = IntentDescription("Stops and saves the active focus session.")
-  static var openAppWhenRun = false
+  static var openAppWhenRun: Bool = false
+  static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
   @Parameter(title: "Session") var sessionID: String
 

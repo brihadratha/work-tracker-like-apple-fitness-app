@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		BB0000010000000000000001 /* StopWorkSessionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000110000000000000011 /* StopWorkSessionIntent.swift */; };
+		BB0000020000000000000002 /* StopWorkSessionIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000110000000000000011 /* StopWorkSessionIntent.swift */; };
 		AA0000010000000000000001 /* WorkSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000110000000000000011 /* WorkSessionAttributes.swift */; };
 		AA0000020000000000000002 /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000120000000000000012 /* LiveActivityPlugin.swift */; };
 		AA0000030000000000000003 /* WorkRingsLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000130000000000000013 /* WorkRingsLiveActivity.swift */; };
@@ -371,6 +372,7 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				AA0000010000000000000001 /* WorkSessionAttributes.swift in Sources */,
 				AA0000020000000000000002 /* LiveActivityPlugin.swift in Sources */,
+				BB0000020000000000000002 /* StopWorkSessionIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
