@@ -12,8 +12,16 @@ class AwardsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final earned = state.earnedAwards;
-    final locked = state.lockedAwards;
+    final earned = [...state.earnedAwards]
+      ..sort(
+        (a, b) => (b.lastEarnedOn ?? DateTime(1970)).compareTo(
+          a.lastEarnedOn ?? DateTime(1970),
+        ),
+      );
+    final locked = [...state.lockedAwards]
+      ..sort((a, b) => b.progress.compareTo(a.progress));
+    final upNext = locked.take(6).toList();
+    final later = locked.skip(6).toList();
     final totalEarned = earned.fold<int>(0, (sum, a) => sum + a.timesEarned);
 
     return CustomScrollView(
@@ -38,9 +46,14 @@ class AwardsScreen extends StatelessWidget {
                 _AwardGrid(awards: earned),
                 const SizedBox(height: 28),
               ],
-              if (locked.isNotEmpty) ...[
-                const SectionHeader('Still to earn'),
-                _AwardGrid(awards: locked),
+              if (upNext.isNotEmpty) ...[
+                const SectionHeader('Up next'),
+                _AwardGrid(awards: upNext),
+              ],
+              if (later.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                const SectionHeader('More goals'),
+                _AwardGrid(awards: later),
               ],
             ],
           ),
@@ -89,7 +102,11 @@ class _AwardsSummary extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.caption, required this.color});
+  const _Stat({
+    required this.value,
+    required this.caption,
+    required this.color,
+  });
 
   final String value;
   final String caption;

@@ -93,17 +93,18 @@ class DailySummary {
     // A session ending exactly on the hour hasn't entered the next hour.
     final lastMinuteOfWork = endExclusive.subtract(const Duration(minutes: 1));
     final spannedDays = lastMinuteOfWork.difference(session.start).inDays;
-    final lastHour = spannedDays > 0 || lastMinuteOfWork.day != session.start.day
+    final lastHour =
+        spannedDays > 0 || lastMinuteOfWork.day != session.start.day
         ? 23
         : lastMinuteOfWork.hour;
     return [for (var h = firstHour; h <= lastHour; h++) h];
   }
 
   int valueFor(RingKind kind) => switch (kind) {
-        RingKind.focus => focusMinutes,
-        RingKind.sessions => deepSessions,
-        RingKind.consistency => activeHours,
-      };
+    RingKind.focus => focusMinutes,
+    RingKind.sessions => deepSessions,
+    RingKind.consistency => activeHours,
+  };
 
   int goalFor(RingKind kind) => goals.goalFor(kind);
 
@@ -114,20 +115,16 @@ class DailySummary {
     return valueFor(kind) / goal;
   }
 
-  bool isClosed(RingKind kind) => valueFor(kind) >= goalFor(kind) && goalFor(kind) > 0;
+  bool isClosed(RingKind kind) =>
+      valueFor(kind) >= goalFor(kind) && goalFor(kind) > 0;
 
-  /// All three rings closed — the day that keeps a streak alive.
-  bool get isPerfect => RingKind.values.every(isClosed);
+  /// The single daily minutes ring is closed.
+  bool get isPerfect => isClosed(RingKind.focus);
 
-  int get closedRingCount => RingKind.values.where(isClosed).length;
+  int get closedRingCount => isPerfect ? 1 : 0;
 
   bool get hasWork => focusMinutes > 0;
 
-  /// Average of the three rings, capped per-ring, used for the history grid.
-  double get overallProgress {
-    final total = RingKind.values
-        .map((k) => progressFor(k).clamp(0.0, 1.0))
-        .reduce((a, b) => a + b);
-    return total / RingKind.values.length;
-  }
+  /// Capped minutes progress used by compact history views.
+  double get overallProgress => progressFor(RingKind.focus).clamp(0.0, 1.0);
 }

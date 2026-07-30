@@ -6,10 +6,8 @@ import '../models/work_session.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/activity_rings.dart';
-import '../widgets/ring_stats.dart';
 import 'today_screen.dart';
 
-/// Read-only look back at a single past day, opened from the history grid.
 class DayDetailScreen extends StatelessWidget {
   const DayDetailScreen({super.key, required this.day});
 
@@ -28,60 +26,46 @@ class DayDetailScreen extends StatelessWidget {
         title: Text(Fmt.relativeDay(day, state.today)),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 36),
         children: [
           Center(
             child: ActivityRings(
-              size: 190,
-              progress: {
-                for (final kind in RingKind.values) kind: summary.progressFor(kind),
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
-          AppCard(child: RingStatColumn(summary: summary, dense: true)),
-          const SizedBox(height: 14),
-          if (summary.isPerfect)
-            AppCard(
-              color: AppColors.sessionsStart.withValues(alpha: 0.14),
-              child: const Row(
+              size: 220,
+              strokeWidth: 27,
+              progress: {RingKind.focus: summary.progressFor(RingKind.focus)},
+              center: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle_rounded,
-                      color: AppColors.sessionsEnd, size: 20),
-                  SizedBox(width: 12),
                   Text(
-                    'Perfect day — all three closed.',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.label,
+                    '${summary.focusMinutes}',
+                    style: const TextStyle(
+                      fontSize: 50,
+                      height: 1,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -2,
                     ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    'OF ${summary.goals.focusMinutes} MIN',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: AppColors.focusEnd),
                   ),
                 ],
               ),
             ),
-          if (summary.isPerfect) const SizedBox(height: 14),
-          if (summary.hasWork) ...[
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionHeader('Active hours'),
-                  HourStrip(summary: summary),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
-          ],
-          SectionHeader('${sessions.length} block${sessions.length == 1 ? '' : 's'}'),
+          ),
+          const SizedBox(height: 30),
+          SectionHeader(
+            '${sessions.length} ${sessions.length == 1 ? 'session' : 'sessions'}',
+          ),
           if (sessions.isEmpty)
-            const AppCard(
-              padding: EdgeInsets.symmetric(vertical: 28),
-              child: Center(
-                child: Text(
-                  'Nothing logged this day',
-                  style: TextStyle(fontSize: 14, color: AppColors.tertiaryLabel),
-                ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                'No time logged this day.',
+                style: TextStyle(fontSize: 14, color: AppColors.tertiaryLabel),
               ),
             )
           else
@@ -96,7 +80,10 @@ class DayDetailScreen extends StatelessWidget {
                     ),
                     if (i != sessions.length - 1)
                       const Divider(
-                          height: 1, indent: 60, color: AppColors.separator),
+                        height: 1,
+                        indent: 60,
+                        color: AppColors.separator,
+                      ),
                   ],
                 ],
               ),
@@ -109,12 +96,10 @@ class DayDetailScreen extends StatelessWidget {
 
 class _ReadOnlyTile extends StatelessWidget {
   const _ReadOnlyTile({required this.session, required this.deepThreshold});
-
   final WorkSession session;
   final int deepThreshold;
 
   @override
-  Widget build(BuildContext context) {
-    return SessionTile(session: session, deepThreshold: deepThreshold);
-  }
+  Widget build(BuildContext context) =>
+      SessionTile(session: session, deepThreshold: deepThreshold);
 }

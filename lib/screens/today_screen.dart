@@ -7,10 +7,9 @@ import '../models/work_session.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/activity_rings.dart';
-import '../widgets/charts.dart';
 import '../widgets/log_session_sheet.dart';
-import '../widgets/ring_stats.dart';
 import '../widgets/timer_card.dart';
+import 'goals_screen.dart';
 
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
@@ -29,32 +28,26 @@ class TodayScreen extends StatelessWidget {
           title: const Text('Today'),
           actions: [
             IconButton(
-              tooltip: 'Log a block',
+              tooltip: 'Log time',
               onPressed: () => _logBlock(context, state),
-              icon: const Icon(Icons.add_circle_outline_rounded),
+              icon: const Icon(Icons.add_rounded),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
           ],
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 36),
           sliver: SliverList.list(
             children: [
               Text(
                 Fmt.dayFull(state.today).toUpperCase(),
                 style: Theme.of(context).textTheme.labelSmall,
               ),
-              const SizedBox(height: 16),
-              _RingsHeader(summary: summary),
-              const SizedBox(height: 20),
-              _MotivationBanner(summary: summary),
               const SizedBox(height: 14),
+              _FocusHero(summary: summary),
+              const SizedBox(height: 24),
               const TimerCard(),
-              const SizedBox(height: 14),
-              _ActiveHoursCard(summary: summary),
-              const SizedBox(height: 14),
-              _WeekCard(days: state.recentDays(7)),
-              const SizedBox(height: 22),
+              const SizedBox(height: 28),
               _SessionsSection(sessions: sessions, state: state),
             ],
           ),
@@ -75,153 +68,78 @@ class TodayScreen extends StatelessWidget {
   }
 }
 
-class _RingsHeader extends StatelessWidget {
-  const _RingsHeader({required this.summary});
+class _FocusHero extends StatelessWidget {
+  const _FocusHero({required this.summary});
 
   final DailySummary summary;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    final progress = summary.progressFor(RingKind.focus);
+    final remaining = (summary.goals.focusMinutes - summary.focusMinutes).clamp(
+      0,
+      9999,
+    );
+    return Column(
       children: [
-        Expanded(child: RingStatColumn(summary: summary)),
-        const SizedBox(width: 12),
-        ActivityRings(
-          size: 176,
-          progress: {
-            for (final kind in RingKind.values) kind: summary.progressFor(kind),
-          },
+        GestureDetector(
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const GoalsScreen())),
+          child: Semantics(
+            button: true,
+            label: 'Edit daily minutes goal',
+            child: ActivityRings(
+              size: 246,
+              strokeWidth: 29,
+              progress: {RingKind.focus: progress},
+              center: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${summary.focusMinutes}',
+                    style: const TextStyle(
+                      fontSize: 58,
+                      height: 0.95,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -2.5,
+                      color: AppColors.label,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'OF ${summary.goals.focusMinutes} MIN',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: AppColors.focusEnd),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          child: Text(
+            summary.isClosed(RingKind.focus)
+                ? 'Goal complete. Keep the momentum if it feels good.'
+                : summary.hasWork
+                ? '$remaining minutes to close your ring.'
+                : 'Start with one focused minute.',
+            key: ValueKey(
+              '${summary.focusMinutes}-${summary.goals.focusMinutes}',
+            ),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondaryLabel,
+            ),
+          ),
         ),
       ],
-    );
-  }
-}
-
-/// The one line of encouragement under the rings — what's left, or a
-/// well-earned victory lap.
-class _MotivationBanner extends StatelessWidget {
-  const _MotivationBanner({required this.summary});
-
-  final DailySummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final message = _message();
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      color: summary.isPerfect
-          ? AppColors.sessionsStart.withValues(alpha: 0.14)
-          : AppColors.surface,
-      child: Row(
-        children: [
-          Icon(
-            summary.isPerfect
-                ? Icons.check_circle_rounded
-                : Icons.arrow_circle_right_rounded,
-            size: 20,
-            color: summary.isPerfect ? AppColors.sessionsEnd : AppColors.focusEnd,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                fontSize: 14.5,
-                height: 1.3,
-                fontWeight: FontWeight.w500,
-                color: AppColors.label,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _message() {
-    if (summary.isPerfect) {
-      return 'All three rings closed. That\'s the day — anything else is bonus.';
-    }
-    if (!summary.hasWork) {
-      return 'Nothing logged yet. One block is all it takes to start the day.';
-    }
-
-    // Nudge toward whichever ring is closest to closing.
-    final open = RingKind.values.where((k) => !summary.isClosed(k)).toList()
-      ..sort((a, b) => summary.progressFor(b).compareTo(summary.progressFor(a)));
-    final nearest = open.first;
-    final remaining = summary.goalFor(nearest) - summary.valueFor(nearest);
-
-    return switch (nearest) {
-      RingKind.focus =>
-        '${Fmt.duration(remaining)} of focus left to close your Focus ring.',
-      RingKind.sessions => remaining == 1
-          ? 'One more deep block closes your Deep Work ring.'
-          : '$remaining more deep blocks close your Deep Work ring.',
-      RingKind.consistency => remaining == 1
-          ? 'Work in one more hour of the day to close Active Hours.'
-          : 'Work in $remaining more hours of the day to close Active Hours.',
-    };
-  }
-}
-
-class _ActiveHoursCard extends StatelessWidget {
-  const _ActiveHoursCard({required this.summary});
-
-  final DailySummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            'Active hours',
-            trailing: Text(
-              '${summary.activeHours} of ${summary.goalFor(RingKind.consistency)}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.consistencyEnd,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          HourStrip(summary: summary),
-        ],
-      ),
-    );
-  }
-}
-
-class _WeekCard extends StatelessWidget {
-  const _WeekCard({required this.days});
-
-  final List<DailySummary> days;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = days.fold<int>(0, (sum, day) => sum + day.focusMinutes);
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            'Last 7 days',
-            trailing: Text(
-              '${Fmt.duration(total)} total',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.focusEnd,
-              ),
-            ),
-          ),
-          WeeklyBars(kind: RingKind.focus, days: days),
-        ],
-      ),
     );
   }
 }
@@ -237,15 +155,15 @@ class _SessionsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader('${sessions.length} block${sessions.length == 1 ? '' : 's'}'),
+        SectionHeader(
+          sessions.isEmpty ? 'Today' : 'Today · ${sessions.length}',
+        ),
         if (sessions.isEmpty)
-          const AppCard(
-            padding: EdgeInsets.symmetric(vertical: 28, horizontal: 16),
-            child: Center(
-              child: Text(
-                'No blocks logged today',
-                style: TextStyle(fontSize: 14, color: AppColors.tertiaryLabel),
-              ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14),
+            child: Text(
+              'Your sessions will appear here.',
+              style: TextStyle(fontSize: 14, color: AppColors.tertiaryLabel),
             ),
           )
         else
@@ -286,7 +204,7 @@ class _SessionsSection extends StatelessWidget {
         start: block.start,
         minutes: block.minutes,
         category: block.category,
-        note: block.note ?? '',
+        note: block.note,
       ),
     );
   }
@@ -309,8 +227,6 @@ class SessionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDeep = session.minutes >= deepThreshold;
-
     return Dismissible(
       key: ValueKey(session.id),
       direction: onDelete == null
@@ -333,7 +249,11 @@ class SessionTile extends StatelessWidget {
             color: session.category.color.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(session.category.icon, size: 18, color: session.category.color),
+          child: Icon(
+            session.category.icon,
+            size: 18,
+            color: session.category.color,
+          ),
         ),
         title: Row(
           children: [
@@ -346,23 +266,6 @@ class SessionTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            if (isDeep)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.sessionsStart.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: const Text(
-                  'DEEP',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                    color: AppColors.sessionsEnd,
-                  ),
-                ),
-              ),
           ],
         ),
         subtitle: Text(

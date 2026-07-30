@@ -18,10 +18,90 @@ class AwardCatalog {
     style: AwardStyle.milestone,
   );
 
+  static const streak3 = AwardDefinition(
+    id: 'streak_3',
+    title: '3 Day Spark',
+    description: 'Close your ring three days in a row.',
+    icon: Icons.local_fire_department_rounded,
+    style: AwardStyle.milestone,
+  );
+
+  static const streak14 = AwardDefinition(
+    id: 'streak_14',
+    title: '2 Week Streak',
+    description: 'Close your ring fourteen days in a row.',
+    icon: Icons.whatshot_rounded,
+    style: AwardStyle.milestone,
+  );
+
+  static const focus1h = AwardDefinition(
+    id: 'focus_1h',
+    title: 'First Hour',
+    description: 'Log your first focused hour.',
+    icon: Icons.timelapse_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus10h = AwardDefinition(
+    id: 'focus_10h',
+    title: '10 Hours',
+    description: 'Log 10 hours of focused work.',
+    icon: Icons.timelapse_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus25h = AwardDefinition(
+    id: 'focus_25h',
+    title: '25 Hours',
+    description: 'Log 25 hours of focused work.',
+    icon: Icons.bolt_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus50h = AwardDefinition(
+    id: 'focus_50h',
+    title: '50 Hours',
+    description: 'Log 50 hours of focused work.',
+    icon: Icons.bolt_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus250h = AwardDefinition(
+    id: 'focus_250h',
+    title: '250 Hours',
+    description: 'Log 250 hours of focused work.',
+    icon: Icons.workspace_premium_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const sessions10 = AwardDefinition(
+    id: 'sessions_10',
+    title: '10 Sessions',
+    description: 'Complete 10 focused sessions.',
+    icon: Icons.stacked_bar_chart_rounded,
+    style: AwardStyle.sessions,
+  );
+
+  static const sessions25 = AwardDefinition(
+    id: 'sessions_25',
+    title: '25 Sessions',
+    description: 'Complete 25 focused sessions.',
+    icon: Icons.stacked_bar_chart_rounded,
+    style: AwardStyle.sessions,
+  );
+
+  static const sessions50 = AwardDefinition(
+    id: 'sessions_50',
+    title: '50 Sessions',
+    description: 'Complete 50 focused sessions.',
+    icon: Icons.stacked_bar_chart_rounded,
+    style: AwardStyle.sessions,
+  );
+
   static const perfectDay = AwardDefinition(
     id: 'perfect_day',
     title: 'Perfect Day',
-    description: 'Close all three rings in a single day.',
+    description: 'Close your minutes ring in a single day.',
     icon: Icons.brightness_7_rounded,
     style: AwardStyle.perfect,
     repeatable: true,
@@ -30,7 +110,7 @@ class AwardCatalog {
   static const perfectWeek = AwardDefinition(
     id: 'perfect_week',
     title: 'Perfect Week',
-    description: 'Close all three rings every day of a calendar week.',
+    description: 'Close your minutes ring every day of a calendar week.',
     icon: Icons.calendar_view_week_rounded,
     style: AwardStyle.perfect,
     repeatable: true,
@@ -39,7 +119,7 @@ class AwardCatalog {
   static const perfectMonth = AwardDefinition(
     id: 'perfect_month',
     title: 'Perfect Month',
-    description: 'Close all three rings every day of a calendar month.',
+    description: 'Close your minutes ring every day of a calendar month.',
     icon: Icons.calendar_month_rounded,
     style: AwardStyle.perfect,
     repeatable: true,
@@ -104,7 +184,7 @@ class AwardCatalog {
   static const doubleFocus = AwardDefinition(
     id: 'double_focus',
     title: 'Double Focus',
-    description: 'Hit twice your Focus goal in one day.',
+    description: 'Hit twice your minutes goal in one day.',
     icon: Icons.bolt_rounded,
     style: AwardStyle.focus,
     repeatable: true,
@@ -113,7 +193,7 @@ class AwardCatalog {
   static const tripleFocus = AwardDefinition(
     id: 'triple_focus',
     title: 'Triple Focus',
-    description: 'Hit three times your Focus goal in one day.',
+    description: 'Hit three times your minutes goal in one day.',
     icon: Icons.rocket_launch_rounded,
     style: AwardStyle.focus,
     repeatable: true,
@@ -200,20 +280,31 @@ class AwardCatalog {
   );
 
   static const all = <AwardDefinition>[
+    firstBlock,
     perfectDay,
+    streak3,
     perfectWeek,
     perfectMonth,
     streak7,
+    streak14,
     streak30,
     streak100,
     streak365,
+    focus1h,
+    focus10h,
+    focus25h,
+    focus50h,
     focus100h,
+    focus250h,
     focus500h,
     focus1000h,
     doubleFocus,
     tripleFocus,
     deepDive,
     marathon,
+    sessions10,
+    sessions25,
+    sessions50,
     hundredSessions,
     earlyBird,
     nightOwl,
@@ -221,7 +312,6 @@ class AwardCatalog {
     comeback,
     wellRounded,
     consistencyKing,
-    firstBlock,
   ];
 }
 
@@ -237,14 +327,22 @@ class AwardsEngine {
     required DateTime today,
   }) {
     final orderedDays = byDay.keys.toList()..sort();
-    final orderedSessions = [...sessions]..sort((a, b) => a.start.compareTo(b.start));
+    final orderedSessions = [...sessions]
+      ..sort((a, b) => a.start.compareTo(b.start));
 
     return <Award>[
-      _dayAward(AwardCatalog.perfectDay, orderedDays, byDay, (d) => d.isPerfect),
+      _firstBlockAward(orderedSessions),
+      _dayAward(
+        AwardCatalog.perfectDay,
+        orderedDays,
+        byDay,
+        (d) => d.isPerfect,
+      ),
       _perfectWeekAward(byDay, today),
       _perfectMonthAward(byDay, today),
       ..._streakAwards(byDay, today),
       ..._lifetimeHourAwards(orderedDays, byDay),
+      ..._sessionCountAwards(orderedSessions),
       _dayAward(
         AwardCatalog.doubleFocus,
         orderedDays,
@@ -257,10 +355,22 @@ class AwardsEngine {
         byDay,
         (d) => d.progressFor(RingKind.focus) >= 3,
       ),
-      _sessionAward(AwardCatalog.deepDive, orderedSessions, (s) => s.minutes >= 120),
-      _sessionAward(AwardCatalog.marathon, orderedSessions, (s) => s.minutes >= 180),
+      _sessionAward(
+        AwardCatalog.deepDive,
+        orderedSessions,
+        (s) => s.minutes >= 120,
+      ),
+      _sessionAward(
+        AwardCatalog.marathon,
+        orderedSessions,
+        (s) => s.minutes >= 180,
+      ),
       _hundredSessionsAward(orderedDays, byDay),
-      _sessionAward(AwardCatalog.earlyBird, orderedSessions, (s) => s.start.hour < 6),
+      _sessionAward(
+        AwardCatalog.earlyBird,
+        orderedSessions,
+        (s) => s.start.hour < 6,
+      ),
       _sessionAward(
         AwardCatalog.nightOwl,
         orderedSessions,
@@ -275,7 +385,6 @@ class AwardsEngine {
         (d) => d.minutesByCategory.length >= WorkCategory.values.length,
       ),
       _monthlyRingCloseAward(byDay),
-      _firstBlockAward(orderedSessions),
     ];
   }
 
@@ -325,8 +434,10 @@ class AwardsEngine {
     for (final start in weekStarts) {
       final end = start.add(const Duration(days: 6));
       if (end.isAfter(normalizedToday)) continue;
-      final allPerfect = List.generate(7, (i) => start.add(Duration(days: i)))
-          .every((d) => byDay[d]?.isPerfect ?? false);
+      final allPerfect = List.generate(
+        7,
+        (i) => start.add(Duration(days: i)),
+      ).every((d) => byDay[d]?.isPerfect ?? false);
       if (allPerfect) earned.add(end);
     }
     earned.sort();
@@ -336,26 +447,35 @@ class AwardsEngine {
       timesEarned: earned.length,
       firstEarnedOn: earned.isEmpty ? null : earned.first,
       lastEarnedOn: earned.isEmpty ? null : earned.last,
-      progress: earned.isEmpty ? _currentWeekProgress(byDay, normalizedToday) : 1,
-      progressLabel: earned.isEmpty ? _currentWeekLabel(byDay, normalizedToday) : null,
+      progress: earned.isEmpty
+          ? _currentWeekProgress(byDay, normalizedToday)
+          : 1,
+      progressLabel: earned.isEmpty
+          ? _currentWeekLabel(byDay, normalizedToday)
+          : null,
     );
   }
 
-  double _currentWeekProgress(Map<DateTime, DailySummary> byDay, DateTime today) {
+  double _currentWeekProgress(
+    Map<DateTime, DailySummary> byDay,
+    DateTime today,
+  ) {
     final start = today.subtract(Duration(days: today.weekday - 1));
     final elapsed = today.difference(start).inDays + 1;
-    final perfect = List.generate(elapsed, (i) => start.add(Duration(days: i)))
-        .where((d) => byDay[d]?.isPerfect ?? false)
-        .length;
+    final perfect = List.generate(
+      elapsed,
+      (i) => start.add(Duration(days: i)),
+    ).where((d) => byDay[d]?.isPerfect ?? false).length;
     return perfect / 7;
   }
 
   String _currentWeekLabel(Map<DateTime, DailySummary> byDay, DateTime today) {
     final start = today.subtract(Duration(days: today.weekday - 1));
     final elapsed = today.difference(start).inDays + 1;
-    final perfect = List.generate(elapsed, (i) => start.add(Duration(days: i)))
-        .where((d) => byDay[d]?.isPerfect ?? false)
-        .length;
+    final perfect = List.generate(
+      elapsed,
+      (i) => start.add(Duration(days: i)),
+    ).where((d) => byDay[d]?.isPerfect ?? false).length;
     return '$perfect of 7 days this week';
   }
 
@@ -388,7 +508,11 @@ class AwardsEngine {
   }
 
   List<Award> _streakAwards(Map<DateTime, DailySummary> byDay, DateTime today) {
-    final streak = const StreakCalculator().compute(byDay, today, (d) => d.isPerfect);
+    final streak = const StreakCalculator().compute(
+      byDay,
+      today,
+      (d) => d.isPerfect,
+    );
     final best = streak.longest;
 
     Award milestone(AwardDefinition def, int target) {
@@ -402,7 +526,9 @@ class AwardsEngine {
     }
 
     return [
+      milestone(AwardCatalog.streak3, 3),
       milestone(AwardCatalog.streak7, 7),
+      milestone(AwardCatalog.streak14, 14),
       milestone(AwardCatalog.streak30, 30),
       milestone(AwardCatalog.streak100, 100),
       milestone(AwardCatalog.streak365, 365),
@@ -415,7 +541,7 @@ class AwardsEngine {
   ) {
     // Walk the history forward so each milestone gets the date it was crossed.
     final crossedOn = <int, DateTime>{};
-    const targetsHours = [100, 500, 1000];
+    const targetsHours = [1, 10, 25, 50, 100, 250, 500, 1000];
     var runningMinutes = 0;
     for (final day in orderedDays) {
       runningMinutes += byDay[day]!.focusMinutes;
@@ -435,15 +561,44 @@ class AwardsEngine {
         firstEarnedOn: earnedOn,
         lastEarnedOn: earnedOn,
         progress: (totalHours / target).clamp(0.0, 1.0),
-        progressLabel:
-            earnedOn != null ? null : '${totalHours.floor()} of $target hours',
+        progressLabel: earnedOn != null
+            ? null
+            : '${totalHours.floor()} of $target hours',
       );
     }
 
     return [
+      hourAward(AwardCatalog.focus1h, 1),
+      hourAward(AwardCatalog.focus10h, 10),
+      hourAward(AwardCatalog.focus25h, 25),
+      hourAward(AwardCatalog.focus50h, 50),
       hourAward(AwardCatalog.focus100h, 100),
+      hourAward(AwardCatalog.focus250h, 250),
       hourAward(AwardCatalog.focus500h, 500),
       hourAward(AwardCatalog.focus1000h, 1000),
+    ];
+  }
+
+  List<Award> _sessionCountAwards(List<WorkSession> orderedSessions) {
+    Award milestone(AwardDefinition definition, int target) {
+      final earned = orderedSessions.length >= target;
+      final earnedOn = earned ? orderedSessions[target - 1].day : null;
+      return Award(
+        definition: definition,
+        timesEarned: earned ? 1 : 0,
+        firstEarnedOn: earnedOn,
+        lastEarnedOn: earnedOn,
+        progress: (orderedSessions.length / target).clamp(0.0, 1.0),
+        progressLabel: earned
+            ? null
+            : '${orderedSessions.length} of $target sessions',
+      );
+    }
+
+    return [
+      milestone(AwardCatalog.sessions10, 10),
+      milestone(AwardCatalog.sessions25, 25),
+      milestone(AwardCatalog.sessions50, 50),
     ];
   }
 
@@ -469,13 +624,15 @@ class AwardsEngine {
   }
 
   Award _weekendWarriorAward(Map<DateTime, DailySummary> byDay) {
-    final saturdays = byDay.keys.where((d) => d.weekday == DateTime.saturday).toList()
-      ..sort();
+    final saturdays =
+        byDay.keys.where((d) => d.weekday == DateTime.saturday).toList()
+          ..sort();
     final earned = <DateTime>[];
     for (final saturday in saturdays) {
       final sunday = saturday.add(const Duration(days: 1));
       final both =
-          (byDay[saturday]?.isPerfect ?? false) && (byDay[sunday]?.isPerfect ?? false);
+          (byDay[saturday]?.isPerfect ?? false) &&
+          (byDay[sunday]?.isPerfect ?? false);
       if (both) earned.add(sunday);
     }
     return Award(
@@ -497,7 +654,9 @@ class AwardsEngine {
     final earned = <DateTime>[];
     for (var i = 1; i < workedDays.length; i++) {
       final gap = workedDays[i].difference(workedDays[i - 1]).inDays;
-      if (gap >= 8 && byDay[workedDays[i]]!.isPerfect) earned.add(workedDays[i]);
+      if (gap >= 8 && byDay[workedDays[i]]!.isPerfect) {
+        earned.add(workedDays[i]);
+      }
     }
     return Award(
       definition: AwardCatalog.comeback,
@@ -517,8 +676,9 @@ class AwardsEngine {
       closesByMonth.update(month, (v) => v + 1, ifAbsent: () => 1);
     }
 
-    final earned = closesByMonth.entries.where((e) => e.value >= target).toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final earned =
+        closesByMonth.entries.where((e) => e.value >= target).toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
     final best = closesByMonth.values.fold(0, (a, b) => a > b ? a : b);
 
     return Award(
