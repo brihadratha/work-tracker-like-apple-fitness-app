@@ -36,6 +36,19 @@ class LiveActivityService {
   Future<void> end({required Duration elapsed}) =>
       _invoke('end', {'elapsedSeconds': elapsed.inSeconds});
 
+  /// Returns a stop duration requested from the Live Activity, once.
+  Future<Duration?> takeStoppedElapsed() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
+    try {
+      final seconds = await _channel.invokeMethod<num>('takeStopRequest');
+      return seconds == null ? null : Duration(seconds: seconds.round());
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   Future<void> _invoke(String method, Map<String, Object> arguments) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
     try {

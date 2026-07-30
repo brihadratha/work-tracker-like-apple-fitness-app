@@ -18,6 +18,86 @@ class AwardCatalog {
     style: AwardStyle.milestone,
   );
 
+  static const streak3 = AwardDefinition(
+    id: 'streak_3',
+    title: '3 Day Spark',
+    description: 'Close your ring three days in a row.',
+    icon: Icons.local_fire_department_rounded,
+    style: AwardStyle.milestone,
+  );
+
+  static const streak14 = AwardDefinition(
+    id: 'streak_14',
+    title: '2 Week Streak',
+    description: 'Close your ring fourteen days in a row.',
+    icon: Icons.whatshot_rounded,
+    style: AwardStyle.milestone,
+  );
+
+  static const focus1h = AwardDefinition(
+    id: 'focus_1h',
+    title: 'First Hour',
+    description: 'Log your first focused hour.',
+    icon: Icons.timelapse_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus10h = AwardDefinition(
+    id: 'focus_10h',
+    title: '10 Hours',
+    description: 'Log 10 hours of focused work.',
+    icon: Icons.timelapse_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus25h = AwardDefinition(
+    id: 'focus_25h',
+    title: '25 Hours',
+    description: 'Log 25 hours of focused work.',
+    icon: Icons.bolt_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus50h = AwardDefinition(
+    id: 'focus_50h',
+    title: '50 Hours',
+    description: 'Log 50 hours of focused work.',
+    icon: Icons.bolt_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const focus250h = AwardDefinition(
+    id: 'focus_250h',
+    title: '250 Hours',
+    description: 'Log 250 hours of focused work.',
+    icon: Icons.workspace_premium_rounded,
+    style: AwardStyle.focus,
+  );
+
+  static const sessions10 = AwardDefinition(
+    id: 'sessions_10',
+    title: '10 Sessions',
+    description: 'Complete 10 focused sessions.',
+    icon: Icons.stacked_bar_chart_rounded,
+    style: AwardStyle.sessions,
+  );
+
+  static const sessions25 = AwardDefinition(
+    id: 'sessions_25',
+    title: '25 Sessions',
+    description: 'Complete 25 focused sessions.',
+    icon: Icons.stacked_bar_chart_rounded,
+    style: AwardStyle.sessions,
+  );
+
+  static const sessions50 = AwardDefinition(
+    id: 'sessions_50',
+    title: '50 Sessions',
+    description: 'Complete 50 focused sessions.',
+    icon: Icons.stacked_bar_chart_rounded,
+    style: AwardStyle.sessions,
+  );
+
   static const perfectDay = AwardDefinition(
     id: 'perfect_day',
     title: 'Perfect Day',
@@ -200,20 +280,31 @@ class AwardCatalog {
   );
 
   static const all = <AwardDefinition>[
+    firstBlock,
     perfectDay,
+    streak3,
     perfectWeek,
     perfectMonth,
     streak7,
+    streak14,
     streak30,
     streak100,
     streak365,
+    focus1h,
+    focus10h,
+    focus25h,
+    focus50h,
     focus100h,
+    focus250h,
     focus500h,
     focus1000h,
     doubleFocus,
     tripleFocus,
     deepDive,
     marathon,
+    sessions10,
+    sessions25,
+    sessions50,
     hundredSessions,
     earlyBird,
     nightOwl,
@@ -221,7 +312,6 @@ class AwardCatalog {
     comeback,
     wellRounded,
     consistencyKing,
-    firstBlock,
   ];
 }
 
@@ -241,6 +331,7 @@ class AwardsEngine {
       ..sort((a, b) => a.start.compareTo(b.start));
 
     return <Award>[
+      _firstBlockAward(orderedSessions),
       _dayAward(
         AwardCatalog.perfectDay,
         orderedDays,
@@ -251,6 +342,7 @@ class AwardsEngine {
       _perfectMonthAward(byDay, today),
       ..._streakAwards(byDay, today),
       ..._lifetimeHourAwards(orderedDays, byDay),
+      ..._sessionCountAwards(orderedSessions),
       _dayAward(
         AwardCatalog.doubleFocus,
         orderedDays,
@@ -293,7 +385,6 @@ class AwardsEngine {
         (d) => d.minutesByCategory.length >= WorkCategory.values.length,
       ),
       _monthlyRingCloseAward(byDay),
-      _firstBlockAward(orderedSessions),
     ];
   }
 
@@ -435,7 +526,9 @@ class AwardsEngine {
     }
 
     return [
+      milestone(AwardCatalog.streak3, 3),
       milestone(AwardCatalog.streak7, 7),
+      milestone(AwardCatalog.streak14, 14),
       milestone(AwardCatalog.streak30, 30),
       milestone(AwardCatalog.streak100, 100),
       milestone(AwardCatalog.streak365, 365),
@@ -448,7 +541,7 @@ class AwardsEngine {
   ) {
     // Walk the history forward so each milestone gets the date it was crossed.
     final crossedOn = <int, DateTime>{};
-    const targetsHours = [100, 500, 1000];
+    const targetsHours = [1, 10, 25, 50, 100, 250, 500, 1000];
     var runningMinutes = 0;
     for (final day in orderedDays) {
       runningMinutes += byDay[day]!.focusMinutes;
@@ -475,9 +568,37 @@ class AwardsEngine {
     }
 
     return [
+      hourAward(AwardCatalog.focus1h, 1),
+      hourAward(AwardCatalog.focus10h, 10),
+      hourAward(AwardCatalog.focus25h, 25),
+      hourAward(AwardCatalog.focus50h, 50),
       hourAward(AwardCatalog.focus100h, 100),
+      hourAward(AwardCatalog.focus250h, 250),
       hourAward(AwardCatalog.focus500h, 500),
       hourAward(AwardCatalog.focus1000h, 1000),
+    ];
+  }
+
+  List<Award> _sessionCountAwards(List<WorkSession> orderedSessions) {
+    Award milestone(AwardDefinition definition, int target) {
+      final earned = orderedSessions.length >= target;
+      final earnedOn = earned ? orderedSessions[target - 1].day : null;
+      return Award(
+        definition: definition,
+        timesEarned: earned ? 1 : 0,
+        firstEarnedOn: earnedOn,
+        lastEarnedOn: earnedOn,
+        progress: (orderedSessions.length / target).clamp(0.0, 1.0),
+        progressLabel: earned
+            ? null
+            : '${orderedSessions.length} of $target sessions',
+      );
+    }
+
+    return [
+      milestone(AwardCatalog.sessions10, 10),
+      milestone(AwardCatalog.sessions25, 25),
+      milestone(AwardCatalog.sessions50, 50),
     ];
   }
 

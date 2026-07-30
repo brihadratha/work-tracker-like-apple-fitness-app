@@ -38,11 +38,7 @@ struct WorkSessionLiveActivity: Widget {
             .foregroundStyle(.secondary)
         }
         Spacer(minLength: 4)
-        Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
-          .font(.system(size: 16, weight: .bold))
-          .foregroundStyle(.black)
-          .frame(width: 42, height: 42)
-          .background(.white, in: Circle())
+        controls(context)
       }
       .padding(16)
       .activityBackgroundTint(Color.black.opacity(0.92))
@@ -69,8 +65,7 @@ struct WorkSessionLiveActivity: Widget {
                 .font(.title2.monospacedDigit().weight(.semibold))
             }
             Spacer()
-            Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
-              .foregroundStyle(ringRed)
+            controls(context, compact: true)
           }
         }
       } compactLeading: {
@@ -83,6 +78,40 @@ struct WorkSessionLiveActivity: Widget {
       }
       .widgetURL(URL(string: "workrings://timer"))
       .keylineTint(ringRed)
+    }
+  }
+
+  @ViewBuilder
+  private func controls(
+    _ context: ActivityViewContext<WorkSessionAttributes>,
+    compact: Bool = false
+  ) -> some View {
+    if #available(iOSApplicationExtension 17.0, *) {
+      HStack(spacing: compact ? 10 : 8) {
+        Link(destination: URL(string: "workrings://timer")!) {
+          Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+            .font(.system(size: compact ? 15 : 14, weight: .bold))
+            .foregroundStyle(compact ? ringRed : Color.black)
+            .frame(width: compact ? 32 : 38, height: compact ? 32 : 38)
+            .background(compact ? Color.white.opacity(0.12) : Color.white, in: Circle())
+        }
+        Button(intent: StopWorkSessionIntent()) {
+          Image(systemName: "stop.fill")
+            .font(.system(size: compact ? 14 : 13, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: compact ? 32 : 38, height: compact ? 32 : 38)
+            .background(ringRed, in: Circle())
+        }
+        .buttonStyle(.plain)
+      }
+    } else {
+      Link(destination: URL(string: "workrings://timer")!) {
+        Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+          .font(.system(size: 15, weight: .bold))
+          .foregroundStyle(.black)
+          .frame(width: 42, height: 42)
+          .background(.white, in: Circle())
+      }
     }
   }
 

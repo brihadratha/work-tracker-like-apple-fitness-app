@@ -12,6 +12,14 @@ final class LiveActivityPlugin: NSObject, FlutterPlugin {
   }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "takeStopRequest" {
+      let defaults = UserDefaults(suiteName: "group.ai.atiq.workRings")
+      let elapsed = defaults?.object(forKey: "liveActivityStoppedElapsedSeconds") as? NSNumber
+      defaults?.removeObject(forKey: "liveActivityStoppedElapsedSeconds")
+      result(elapsed)
+      return
+    }
+
     guard #available(iOS 16.1, *) else {
       result(nil)
       return

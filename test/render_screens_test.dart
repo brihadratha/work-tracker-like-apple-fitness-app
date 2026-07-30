@@ -45,6 +45,7 @@ void main() {
     Widget screen, {
     AppState? withState,
     double scrollBy = 0,
+    Future<void> Function(WidgetTester tester)? interact,
   }) async {
     final state = withState ?? await seededState();
     tester.view
@@ -67,6 +68,10 @@ void main() {
 
     // Let the ring entrance animation finish before capturing.
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    if (interact != null) {
+      await interact(tester);
+      await tester.pumpAndSettle();
+    }
 
     if (scrollBy > 0) {
       await tester.drag(find.byType(CustomScrollView), Offset(0, -scrollBy));
@@ -79,25 +84,70 @@ void main() {
     );
   }
 
-  testWidgets('today', (tester) => render(tester, 'today', const TodayScreen()));
-
-  testWidgets('trends', (tester) => render(tester, 'trends', const TrendsScreen()));
+  testWidgets(
+    'today',
+    (tester) => render(tester, 'today', const TodayScreen()),
+  );
 
   testWidgets(
-    'trends history grid',
+    'trends',
+    (tester) => render(tester, 'trends', const TrendsScreen()),
+  );
+
+  for (final range in ['W', 'M', 'Y']) {
+    testWidgets(
+      'history $range range',
+      (tester) => render(
+        tester,
+        'history_${range.toLowerCase()}',
+        const TrendsScreen(),
+        interact: (tester) async {
+          await tester.tap(find.byKey(ValueKey('history-range-$range')));
+        },
+      ),
+    );
+  }
+
+  testWidgets(
+    'history selected bar value',
     (tester) => render(
       tester,
-      'trends_history',
+      'history_selected',
       const TrendsScreen(),
-      scrollBy: 1400,
+      interact: (tester) async {
+        final bar = tester.widget<GestureDetector>(
+          find.byKey(const ValueKey('history-bar-9')),
+        );
+        bar.onTap!();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('history-selected-value')),
+          findsOneWidget,
+        );
+      },
     ),
   );
 
-  testWidgets('awards', (tester) => render(tester, 'awards', const AwardsScreen()));
+  testWidgets(
+    'trends history grid',
+    (tester) =>
+        render(tester, 'trends_history', const TrendsScreen(), scrollBy: 1400),
+  );
 
-  testWidgets('summary', (tester) => render(tester, 'summary', const ProfileScreen()));
+  testWidgets(
+    'awards',
+    (tester) => render(tester, 'awards', const AwardsScreen()),
+  );
 
-  testWidgets('goals', (tester) => render(tester, 'goals', const GoalsScreen()));
+  testWidgets(
+    'summary',
+    (tester) => render(tester, 'summary', const ProfileScreen()),
+  );
+
+  testWidgets(
+    'goals',
+    (tester) => render(tester, 'goals', const GoalsScreen()),
+  );
 
   testWidgets('empty today', (tester) async {
     final state = AppState(
@@ -117,7 +167,9 @@ Future<void> _loadRealFonts() async {
   Directory? fontDir;
   var dir = File(Platform.resolvedExecutable).parent;
   for (var i = 0; i < 8; i++) {
-    final candidate = Directory('${dir.path}/bin/cache/artifacts/material_fonts');
+    final candidate = Directory(
+      '${dir.path}/bin/cache/artifacts/material_fonts',
+    );
     if (candidate.existsSync()) {
       fontDir = candidate;
       break;
@@ -125,7 +177,9 @@ Future<void> _loadRealFonts() async {
     dir = dir.parent;
   }
   if (fontDir == null) {
-    fail('Could not locate the Flutter material_fonts cache for golden rendering.');
+    fail(
+      'Could not locate the Flutter material_fonts cache for golden rendering.',
+    );
   }
   final fonts = fontDir;
 
@@ -173,7 +227,8 @@ Map<String, dynamic> _seedData() {
           id: 'seed${counter++}',
           start: day.add(Duration(hours: hour, minutes: random.nextInt(30))),
           minutes: minutes,
-          category: WorkCategory.values[random.nextInt(WorkCategory.values.length)],
+          category:
+              WorkCategory.values[random.nextInt(WorkCategory.values.length)],
           note: b == 0 ? 'Morning push' : null,
         ),
       );

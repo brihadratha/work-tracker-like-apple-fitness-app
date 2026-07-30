@@ -7,12 +7,26 @@ import 'package:work_rings/models/award.dart';
 import 'package:work_rings/models/daily_summary.dart';
 import 'package:work_rings/models/goals.dart';
 import 'package:work_rings/models/work_session.dart';
+import 'package:work_rings/services/live_activity_service.dart';
 import 'package:work_rings/state/app_state.dart';
 import 'package:work_rings/theme/app_theme.dart';
 
 /// Fixed "now" so nothing in these tests depends on the wall clock.
 final _now = DateTime(2026, 7, 27, 14, 30);
 DateTime get _today => DateTime(_now.year, _now.month, _now.day);
+
+class _StopRequestLiveActivity extends LiveActivityService {
+  _StopRequestLiveActivity(this.elapsed);
+
+  Duration? elapsed;
+
+  @override
+  Future<Duration?> takeStoppedElapsed() async {
+    final value = elapsed;
+    elapsed = null;
+    return value;
+  }
+}
 
 WorkSession _session({
   required DateTime start,
@@ -363,6 +377,24 @@ void main() {
       expect(find(awards, 'night_owl').isEarned, isTrue);
     });
 
+    test('milestones are spaced across early progress', () {
+      final sessions = [
+        for (var i = 0; i < 10; i++)
+          _session(start: _today.add(Duration(hours: i)), minutes: 6),
+      ];
+      final summary = DailySummary.fromSessions(_today, sessions, goals);
+      final awards = engine.evaluate(
+        byDay: {_today: summary},
+        sessions: sessions,
+        today: _today,
+      );
+
+      expect(find(awards, 'focus_1h').isEarned, isTrue);
+      expect(find(awards, 'focus_10h').isEarned, isFalse);
+      expect(find(awards, 'sessions_10').isEarned, isTrue);
+      expect(find(awards, 'streak_3').progressLabel, '0 of 3 days');
+    });
+
     test('locked hour milestones report how far along they are', () {
       final data = build(
         [],
@@ -476,6 +508,28 @@ void main() {
       final session = await second.stopTimer();
       expect(session!.minutes, 35);
       second.dispose();
+    });
+
+    test('a Live Activity stop saves the exact handed-off duration', () async {
+      var clock = _now;
+      final liveActivity = _StopRequestLiveActivity(
+        const Duration(minutes: 18),
+      );
+      final timed = AppState(
+        persistence: InMemoryPersistence(),
+        clock: () => clock,
+        liveActivity: liveActivity,
+      );
+      await timed.load();
+      await timed.startTimer(WorkCategory.creative);
+      clock = _now.add(const Duration(hours: 2));
+
+      await timed.reconcileLiveActivityActions();
+
+      expect(timed.isTimerRunning, isFalse);
+      expect(timed.sessions.single.minutes, 18);
+      expect(await liveActivity.takeStoppedElapsed(), isNull);
+      timed.dispose();
     });
 
     test('a sub-minute timer is discarded rather than logged', () async {

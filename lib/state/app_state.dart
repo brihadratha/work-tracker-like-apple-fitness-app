@@ -351,6 +351,32 @@ class AppState extends ChangeNotifier {
     return session;
   }
 
+  /// Reconciles a stop pressed on the Lock Screen or Dynamic Island.
+  Future<void> reconcileLiveActivityActions() async {
+    final elapsed = await _liveActivity.takeStoppedElapsed();
+    final running = _timer;
+    if (elapsed == null || running == null) return;
+
+    _timer = null;
+    _ticker?.cancel();
+    _ticker = null;
+    final minutes = elapsed.inMinutes;
+    if (minutes > 0) {
+      _sessions.add(
+        WorkSession(
+          id: _newId(),
+          start: running.startedAt,
+          minutes: minutes,
+          category: running.category,
+        ),
+      );
+      await _commit();
+    } else {
+      await _save();
+      notifyListeners();
+    }
+  }
+
   Future<void> cancelTimer() async {
     final elapsed = timerElapsed;
     _timer = null;
