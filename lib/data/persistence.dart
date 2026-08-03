@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Where the app's JSON blob lives. Swappable so tests can run without a
@@ -8,6 +9,99 @@ import 'package:path_provider/path_provider.dart';
 abstract class Persistence {
   Future<Map<String, dynamic>?> read();
   Future<void> write(Map<String, dynamic> data);
+}
+
+/// Mirrors a local store to a best-effort cloud store.
+///
+/// Local persistence remains authoritative when the cloud is unavailable. On
+/// startup the newest timestamped copy wins and repairs the older store.
+class MirroredPersistence implements Persistence {
+  MirroredPersistence({
+    required this.local,
+    required this.cloud,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final Persistence local;
+  final Persistence cloud;
+  final DateTime Function() _clock;
+
+  @override
+  Future<Map<String, dynamic>?> read() async {
+    final results = await Future.wait([_safeRead(local), _safeRead(cloud)]);
+    final localData = results[0];
+    final cloudData = results[1];
+    final newest = _newest(localData, cloudData);
+    if (newest == null) return null;
+
+    if (!identical(newest, localData)) await _safeWrite(local, newest);
+    if (!identical(newest, cloudData)) await _safeWrite(cloud, newest);
+    return newest;
+  }
+
+  @override
+  Future<void> write(Map<String, dynamic> data) async {
+    final stamped = Map<String, dynamic>.from(data)
+      ..['updatedAt'] = _clock().toUtc().toIso8601String();
+    await local.write(stamped);
+    await _safeWrite(cloud, stamped);
+  }
+
+  static Map<String, dynamic>? _newest(
+    Map<String, dynamic>? local,
+    Map<String, dynamic>? cloud,
+  ) {
+    if (local == null) return cloud;
+    if (cloud == null) return local;
+    final localTime = DateTime.tryParse(local['updatedAt'] as String? ?? '');
+    final cloudTime = DateTime.tryParse(cloud['updatedAt'] as String? ?? '');
+    if (localTime == null) return cloudTime == null ? local : cloud;
+    if (cloudTime == null) return local;
+    return cloudTime.isAfter(localTime) ? cloud : local;
+  }
+
+  static Future<Map<String, dynamic>?> _safeRead(Persistence store) async {
+    try {
+      return await store.read();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _safeWrite(
+    Persistence store,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      await store.write(data);
+    } catch (_) {
+      // Cloud availability must never prevent local work from being saved.
+    }
+  }
+}
+
+/// Reads and writes the app's JSON document through the native iCloud bridge.
+class ICloudPersistence implements Persistence {
+  ICloudPersistence({this.fileName = 'work_rings.json', MethodChannel? channel})
+    : _channel = channel ?? const MethodChannel('work_rings/icloud');
+
+  final String fileName;
+  final MethodChannel _channel;
+
+  @override
+  Future<Map<String, dynamic>?> read() async {
+    final raw = await _channel.invokeMethod<String>('read', {
+      'fileName': fileName,
+    });
+    if (raw == null || raw.trim().isEmpty) return null;
+    return jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  @override
+  Future<void> write(Map<String, dynamic> data) => _channel.invokeMethod<void>(
+    'write',
+    {'fileName': fileName, 'contents': jsonEncode(data)},
+  );
 }
 
 /// Writes a single JSON document into the app's documents directory.

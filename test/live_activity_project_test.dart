@@ -28,4 +28,23 @@ void main() {
     );
     expect('openAppWhenRun: Bool = false'.allMatches(intents).length, 2);
   });
+
+  test('Runner ships the iCloud Documents persistence bridge', () {
+    final project = File(
+      'ios/Runner.xcodeproj/project.pbxproj',
+    ).readAsStringSync();
+    final entitlements = File(
+      'ios/Runner/Runner.entitlements',
+    ).readAsStringSync();
+    final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
+
+    expect(project, contains('ICloudPersistencePlugin.swift in Sources'));
+    expect(appDelegate, contains('ICloudPersistencePlugin.register'));
+    expect(
+      entitlements,
+      contains('com.apple.developer.ubiquity-container-identifiers'),
+    );
+    expect(entitlements, contains('iCloud.ai.atiq.workRings'));
+    expect(entitlements, contains('<string>CloudDocuments</string>'));
+  });
 }

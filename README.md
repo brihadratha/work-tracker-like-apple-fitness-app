@@ -3,7 +3,7 @@
 An iOS work tracker built on the thing that actually makes Apple Fitness stick: three rings you
 want to close, a streak you don't want to break, and a badge waiting on the other side of a good day.
 
-Built in Flutter. Everything is stored on-device — no account, no network, no telemetry.
+Built in Flutter. Data is stored locally first and privately mirrored through the user’s iCloud account — no separate account and no telemetry.
 
 ## The three rings
 
@@ -84,6 +84,7 @@ lib/
   block. That keeps a mid-block ring from tripping a celebration you haven't earned yet.
 - A block that runs past midnight is credited to the day it started, and can't claim more than
   that day's remaining hours.
+- Sessions, dated goals, and running timers are stored locally first and mirrored to iCloud Drive. The app remains usable when iCloud is unavailable.
 - Timers survive being force-quit — a running timer is persisted and picked back up on launch.
 - Streaks and awards are never stored, only ever recomputed from your blocks and your dated goals,
   so the history can't drift out of sync with what you actually did.

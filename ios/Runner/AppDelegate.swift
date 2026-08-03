@@ -15,5 +15,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "WorkLiveActivity") {
       LiveActivityPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "WorkRingsICloud") {
+      ICloudPersistencePlugin.register(with: registrar)
+    }
   }
 }

@@ -72,7 +72,12 @@ class AppState extends ChangeNotifier {
     Persistence? persistence,
     DateTime Function()? clock,
     LiveActivityService? liveActivity,
-  }) : _persistence = persistence ?? FilePersistence(),
+  }) : _persistence =
+           persistence ??
+           MirroredPersistence(
+             local: FilePersistence(),
+             cloud: ICloudPersistence(),
+           ),
        _clock = clock ?? DateTime.now,
        _liveActivity = liveActivity ?? const LiveActivityService();
 
