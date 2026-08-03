@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -63,7 +64,8 @@ class MirroredPersistence implements Persistence {
   static Future<Map<String, dynamic>?> _safeRead(Persistence store) async {
     try {
       return await store.read();
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Cloud persistence read failed: $error');
       return null;
     }
   }
@@ -74,8 +76,9 @@ class MirroredPersistence implements Persistence {
   ) async {
     try {
       await store.write(data);
-    } catch (_) {
+    } catch (error) {
       // Cloud availability must never prevent local work from being saved.
+      debugPrint('Cloud persistence write failed: $error');
     }
   }
 }

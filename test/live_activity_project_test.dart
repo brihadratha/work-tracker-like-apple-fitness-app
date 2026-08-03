@@ -37,6 +37,9 @@ void main() {
       'ios/Runner/Runner.entitlements',
     ).readAsStringSync();
     final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
+    final bridge = File(
+      'ios/Runner/ICloudPersistencePlugin.swift',
+    ).readAsStringSync();
 
     expect(project, contains('ICloudPersistencePlugin.swift in Sources'));
     expect(appDelegate, contains('ICloudPersistencePlugin.register'));
@@ -46,5 +49,7 @@ void main() {
     );
     expect(entitlements, contains('iCloud.ai.atiq.workRings'));
     expect(entitlements, contains('<string>CloudDocuments</string>'));
+    expect(bridge, contains('NSMetadataQueryUbiquitousDocumentsScope'));
+    expect(bridge, contains('startDownloadingUbiquitousItem'));
   });
 }
